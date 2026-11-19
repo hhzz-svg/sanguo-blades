@@ -589,7 +589,7 @@ export class GameEngine {
     player.invulnerability = 0.38;
     this.grantMusou(actualDamage * 0.8);
     this.state.shake = Math.max(this.state.shake, 0.5);
-    this.state.hitstop = Math.max(this.state.hitstop, 0.055);
+    this.state.hitstop = Math.max(this.state.hitstop, 0.04);
     this.state.floatingNumbers.push({ x: player.x, y: player.y - 52, value: -Math.round(actualDamage), crit: false, timer: 0.8 });
     this.state.events.push('受击');
     for (const enemy of this.state.enemies) {
@@ -702,7 +702,7 @@ export class GameEngine {
       });
       this.state.events.push('命中火花');
       this.state.shake = Math.max(this.state.shake, options.heavy ? 0.65 : 0.25);
-      this.state.hitstop = Math.max(this.state.hitstop, options.heavy ? 0.08 : 0.045);
+      this.state.hitstop = Math.max(this.state.hitstop, options.heavy ? 0.06 : 0.025);
       if (enemy.boss && enemy.hp > 0 && enemy.hp <= enemy.maxHp * 0.5 && enemy.phase === 1) {
         enemy.phase = 2;
         this.state.events.push('狂怒');
@@ -981,7 +981,9 @@ export class GameEngine {
     const distance = Math.min(enemy.chargeRemaining, speed * dt);
     const oldX = enemy.x;
     enemy.x = clamp(enemy.x + enemy.chargeDirection * distance, this.state.arenaStartX - 900, this.state.arenaEndX + 900);
-    enemy.chargeRemaining -= Math.abs(enemy.x - oldX);
+    const traveled = Math.abs(enemy.x - oldX);
+    enemy.chargeRemaining = Math.max(0, enemy.chargeRemaining - traveled);
+    const blockedAtArenaEdge = traveled + 0.001 < distance;
     const player = this.state.player;
     const crossedPlayer = player.x >= Math.min(oldX, enemy.x) - 35 && player.x <= Math.max(oldX, enemy.x) + 35
       && Math.abs(player.y - enemy.y) <= 44 && player.z < 80;
@@ -993,7 +995,8 @@ export class GameEngine {
         if (enemy.affix === '嗜血') enemy.hp = Math.min(enemy.maxHp, enemy.hp + enemy.damage * 0.3);
       }
     }
-    if (enemy.chargeRemaining <= 0) {
+    if (enemy.chargeRemaining <= 1e-6 || blockedAtArenaEdge) {
+      enemy.chargeRemaining = 0;
       enemy.action = 'recover';
       enemy.timer = 0.7;
       enemy.telegraphKind = null;

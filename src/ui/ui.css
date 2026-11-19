@@ -45,6 +45,12 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .title-meta { color: #c5b495; font-size: 12px; margin-top: 25px; letter-spacing: .1em; }
 .title-meta strong { font-size: 20px; color: var(--gold); padding: 0 8px; }
 .title-meta span { color: #857860; margin-left: 12px; }
+.asset-loading { display: grid; gap: 5px; width: 220px; margin-top: 14px; color: #d4c7ac; font: 10px sans-serif; letter-spacing: .08em; transition: opacity .35s; }
+.asset-loading.ready { opacity: 0; }
+.asset-loading-bar { display: block; height: 3px; overflow: hidden; background: #5b5041; }
+.asset-loading-bar i { display: block; height: 100%; background: linear-gradient(90deg,#ad3729,#e3c36d); transition: width .12s linear; }
+.screen-heading .asset-loading, .intro-content .asset-loading { margin: 12px auto 0; color: #685a48; }
+.screen-heading .asset-loading-bar, .intro-content .asset-loading-bar { background: #8e7c5d66; }
 .title-footer { position: absolute; bottom: 25px; left: 38px; right: 38px; display: flex; align-items: center; gap: 28px; color: #9b907e; font-size: 11px; letter-spacing: .14em; }
 .title-footer span:first-child { color: #d8c9a9; }
 .audio-toggle { margin-left: auto; border: 0; background: none; color: #c1ad87; font-size: 12px; }
