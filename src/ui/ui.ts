@@ -24,10 +24,39 @@ export type UiAction =
   | 'advance'
   | 'audio';
 
+interface BattleHudElements {
+  canvas: HTMLCanvasElement;
+  heroName: HTMLElement;
+  act: HTMLElement;
+  stage: HTMLElement;
+  wave: HTMLElement;
+  hp: HTMLElement;
+  musou: HTMLElement;
+  musouLabel: HTMLElement;
+  musouTrack: HTMLElement;
+  hpNumber: HTMLElement;
+  dodgePips: HTMLElement;
+  heavy: HTMLElement;
+  charge: HTMLElement;
+  heavyButton: HTMLElement;
+  musouButton: HTMLElement;
+  snap: HTMLElement;
+  combo: HTMLElement;
+  comboCount: HTMLElement;
+  comboRank: HTMLElement;
+  boss: HTMLElement;
+  bossName: HTMLElement;
+  bossHp: HTMLElement;
+  advance: HTMLElement;
+  portrait: HTMLElement;
+}
+
 export class GameUI {
   readonly root: HTMLElement;
   selectedHero: HeroId = 'zhaoyun';
   private animationProgress: AnimationProgress = { loaded: 0, total: 0, ready: false };
+  private battleHud: BattleHudElements | null = null;
+  private dodgePipsKey: string | null = null;
 
   constructor(root: HTMLElement, private readonly onAction: (action: UiAction) => void, private readonly audio: AudioSynth) {
     this.root = root;
@@ -126,52 +155,78 @@ export class GameUI {
         <div id="battle-modal"></div>
       </main>`;
     this.bindActions();
-    return this.root.querySelector<HTMLCanvasElement>('#battle-canvas')!;
+    const get = <T extends HTMLElement>(selector: string): T => this.root.querySelector<T>(selector)!;
+    this.battleHud = {
+      canvas: get<HTMLCanvasElement>('#battle-canvas'),
+      heroName: get('#hud-hero-name'),
+      act: get('#hud-act'),
+      stage: get('#hud-stage'),
+      wave: get('#hud-wave'),
+      hp: get('#hud-hp'),
+      musou: get('#hud-musou'),
+      musouLabel: get('#hud-musou-label'),
+      musouTrack: get('.musou-track'),
+      hpNumber: get('#hud-hp-number'),
+      dodgePips: get('#hud-dodge'),
+      heavy: get('#hud-heavy'),
+      charge: get('#hud-charge'),
+      heavyButton: get('.touch-buttons [data-control="heavy"]'),
+      musouButton: get('.touch-buttons [data-control="musou"]'),
+      snap: get('#snap-flash'),
+      combo: get('#combo-hud'),
+      comboCount: get('#combo-count'),
+      comboRank: get('#combo-rank'),
+      boss: get('#boss-hud'),
+      bossName: get('#boss-name'),
+      bossHp: get('#boss-hp'),
+      advance: get('#advance-button'),
+      portrait: get('#hud-portrait'),
+    };
+    this.dodgePipsKey = null;
+    return this.battleHud.canvas;
   }
 
   updateBattle(state: GameState): void {
+    const hud = this.battleHud;
+    if (!hud) return;
     const hero = HEROES.find((entry) => entry.id === state.heroId)!;
-    this.setText('#hud-hero-name', hero.name);
-    this.setText('#hud-act', state.act === 1 ? '黄巾之乱' : '虎牢关');
-    this.setText('#hud-stage', state.stageName);
-    this.setText('#hud-wave', state.waveComplete ? '敌阵已破 · 前进' : `第 ${state.waveIndex + 1} / ${state.waveCount} 波　敌军 ${state.enemies.length} 人`);
-    const hp = this.root.querySelector<HTMLElement>('#hud-hp');
-    if (hp) hp.style.width = `${Math.max(0, state.player.hp / state.player.maxHp * 100)}%`;
-    const musou = this.root.querySelector<HTMLElement>('#hud-musou');
-    if (musou) musou.style.width = `${state.player.musou}%`;
-    this.setText('#hud-musou-label', `无双 ${Math.floor(state.player.musou)}%`);
-    this.root.querySelector('.musou-track')?.classList.toggle('ready', state.player.musou >= 100);
-    this.setText('#hud-hp-number', `${Math.ceil(state.player.hp)} / ${Math.ceil(state.player.maxHp)}`);
-    const dodgePips = this.root.querySelector<HTMLElement>('#hud-dodge');
-    if (dodgePips) {
-      dodgePips.innerHTML = Array.from({ length: state.player.maxDodgeCharges }, (_, index) =>
+    this.setElementText(hud.heroName, hero.name);
+    this.setElementText(hud.act, state.act === 1 ? '黄巾之乱' : '虎牢关');
+    this.setElementText(hud.stage, state.stageName);
+    this.setElementText(hud.wave, state.waveComplete ? '敌阵已破 · 前进' : `第 ${state.waveIndex + 1} / ${state.waveCount} 波　敌军 ${state.enemies.length} 人`);
+    this.setElementWidth(hud.hp, Math.max(0, state.player.hp / state.player.maxHp * 100));
+    this.setElementWidth(hud.musou, state.player.musou);
+    this.setElementText(hud.musouLabel, `无双 ${Math.floor(state.player.musou)}%`);
+    this.setClass(hud.musouTrack, 'ready', state.player.musou >= 100);
+    this.setElementText(hud.hpNumber, `${Math.ceil(state.player.hp)} / ${Math.ceil(state.player.maxHp)}`);
+    const pipsKey = `${state.player.dodgeCharges}/${state.player.maxDodgeCharges}`;
+    if (this.dodgePipsKey !== pipsKey) {
+      hud.dodgePips.innerHTML = Array.from({ length: state.player.maxDodgeCharges }, (_, index) =>
         `<i class="${index < state.player.dodgeCharges ? 'filled' : ''}"></i>`).join('');
+      this.dodgePipsKey = pipsKey;
     }
-    this.setText('#hud-heavy', state.player.heavyCooldown > 0 ? `${state.player.heavyCooldown.toFixed(1)}s` : '就绪');
-    const charge = this.root.querySelector<HTMLElement>('#hud-charge');
+    this.setElementText(hud.heavy, state.player.heavyCooldown > 0 ? `${state.player.heavyCooldown.toFixed(1)}s` : '就绪');
     const cooldownProgress = Math.max(0, Math.min(1, state.player.heavyCooldown / hero.heavyCooldown));
-    if (charge) charge.style.width = `${(1 - cooldownProgress) * 100}%`;
-    const heavyButton = this.root.querySelector<HTMLElement>('.touch-buttons [data-control="heavy"]');
-    heavyButton?.style.setProperty('--cooldown-angle', `${(1 - cooldownProgress) * 360}deg`);
-    heavyButton?.classList.toggle('ready', cooldownProgress === 0);
-    const musouButton = this.root.querySelector<HTMLElement>('.touch-buttons [data-control="musou"]');
-    musouButton?.classList.toggle('ready', state.player.musou >= 100);
-    this.root.querySelector('#snap-flash')?.classList.toggle('visible', state.player.snapTimer > 0);
-    const combo = this.root.querySelector<HTMLElement>('#combo-hud');
-    combo?.classList.toggle('visible', state.player.comboDisplayTimer > 0);
-    this.setText('#combo-count', String(state.player.comboHits));
+    this.setElementWidth(hud.charge, (1 - cooldownProgress) * 100);
+    this.setElementStyle(hud.heavyButton, '--cooldown-angle', `${Math.round((1 - cooldownProgress) * 360)}deg`);
+    this.setClass(hud.heavyButton, 'ready', cooldownProgress === 0);
+    this.setClass(hud.musouButton, 'ready', state.player.musou >= 100);
+    this.setClass(hud.snap, 'visible', state.player.snapTimer > 0);
+    this.setClass(hud.combo, 'visible', state.player.comboDisplayTimer > 0);
+    this.setElementText(hud.comboCount, String(state.player.comboHits));
     const rank = state.player.comboHits >= 100 ? '神' : state.player.comboHits >= 60 ? '烈' : state.player.comboHits >= 30 ? '猛' : state.player.comboHits >= 10 ? '勇' : '';
-    this.setText('#combo-rank', rank);
+    this.setElementText(hud.comboRank, rank);
     const boss = state.enemies.find((enemy) => enemy.boss);
-    this.root.querySelector('#boss-hud')?.classList.toggle('hidden', !boss);
+    this.setClass(hud.boss, 'hidden', !boss);
     if (boss) {
-      this.setText('#boss-name', `「${boss.kind === 'zhangjiao' ? '天公将军' : '飞将'}」${boss.kind === 'zhangjiao' ? '张角' : '吕布'}${boss.phase === 2 ? ' · 狂怒' : ''}`);
-      const bossHp = this.root.querySelector<HTMLElement>('#boss-hp');
-      if (bossHp) bossHp.style.width = `${Math.max(0, boss.hp / boss.maxHp * 100)}%`;
+      this.setElementText(hud.bossName, `「${boss.kind === 'zhangjiao' ? '天公将军' : '飞将'}」${boss.kind === 'zhangjiao' ? '张角' : '吕布'}${boss.phase === 2 ? ' · 狂怒' : ''}`);
+      this.setElementWidth(hud.bossHp, Math.max(0, boss.hp / boss.maxHp * 100));
     }
-    this.root.querySelector('#advance-button')?.classList.toggle('hidden', !state.waveComplete || state.stageComplete);
-    const portrait = this.root.querySelector<HTMLElement>('#hud-portrait');
-    if (portrait) portrait.style.backgroundImage = `url('${assetUrl(`heroes/${hero.id}_card.jpg`)}')`;
+    this.setClass(hud.advance, 'hidden', !state.waveComplete || state.stageComplete);
+    if (hud.portrait.dataset.hero !== hero.id) {
+      hud.portrait.style.backgroundImage = `url('${assetUrl(`heroes/${hero.id}_card.jpg`)}')`;
+      hud.portrait.dataset.hero = hero.id;
+    }
   }
 
   showBlessings(
@@ -286,9 +341,21 @@ export class GameUI {
     return `<div class="asset-loading${ready ? ' ready' : ''}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"><span class="asset-loading-label">${ready ? '帧动画已就绪' : `载入帧动画 ${percent}%`}</span><span class="asset-loading-bar"><i style="width:${percent}%"></i></span></div>`;
   }
 
-  private setText(selector: string, text: string): void {
-    const element = this.root.querySelector<HTMLElement>(selector);
-    if (element) element.textContent = text;
+  private setElementText(element: HTMLElement, text: string): void {
+    if (element.textContent !== text) element.textContent = text;
+  }
+
+  private setElementWidth(element: HTMLElement, percentage: number): void {
+    const width = `${(Math.round(Math.max(0, Math.min(100, percentage)) * 10) / 10).toFixed(1)}%`;
+    if (element.style.width !== width) element.style.width = width;
+  }
+
+  private setElementStyle(element: HTMLElement, property: string, value: string): void {
+    if (element.style.getPropertyValue(property) !== value) element.style.setProperty(property, value);
+  }
+
+  private setClass(element: HTMLElement, className: string, enabled: boolean): void {
+    if (element.classList.contains(className) !== enabled) element.classList.toggle(className, enabled);
   }
 
   private audioLabel(): string {
