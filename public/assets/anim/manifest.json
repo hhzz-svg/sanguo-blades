@@ -1,0 +1,731 @@
+{
+ "zhaoyun/run": {
+  "src": "anim/zhaoyun_run.webp",
+  "frames": 8,
+  "w": 313,
+  "h": 365,
+  "anchorX": 116,
+  "anchorY": 362,
+  "figureH": 347
+ },
+ "zhaoyun/light1": {
+  "src": "anim/zhaoyun_light1.webp",
+  "frames": 4,
+  "w": 347,
+  "h": 255,
+  "anchorX": 94,
+  "anchorY": 252,
+  "figureH": 240
+ },
+ "zhaoyun/light2": {
+  "src": "anim/zhaoyun_light2.webp",
+  "frames": 4,
+  "w": 317,
+  "h": 249,
+  "anchorX": 96,
+  "anchorY": 246,
+  "figureH": 238
+ },
+ "zhaoyun/light3": {
+  "src": "anim/zhaoyun_light3.webp",
+  "frames": 4,
+  "w": 364,
+  "h": 258,
+  "anchorX": 103,
+  "anchorY": 255,
+  "figureH": 243
+ },
+ "zhaoyun/light4": {
+  "src": "anim/zhaoyun_light4.webp",
+  "frames": 4,
+  "w": 320,
+  "h": 320,
+  "anchorX": 112,
+  "anchorY": 316,
+  "figureH": 267
+ },
+ "zhaoyun/light5": {
+  "src": "anim/zhaoyun_light5.webp",
+  "frames": 8,
+  "w": 332,
+  "h": 323,
+  "anchorX": 122,
+  "anchorY": 320,
+  "figureH": 247
+ },
+ "zhaoyun/heavy": {
+  "src": "anim/zhaoyun_heavy.webp",
+  "frames": 8,
+  "w": 367,
+  "h": 236,
+  "anchorX": 117,
+  "anchorY": 233,
+  "figureH": 214
+ },
+ "zhaoyun/musou": {
+  "src": "anim/zhaoyun_musou.webp",
+  "frames": 8,
+  "w": 372,
+  "h": 378,
+  "anchorX": 121,
+  "anchorY": 375,
+  "figureH": 260
+ },
+ "zhaoyun/idle": {
+  "src": "anim/zhaoyun_idle.webp",
+  "frames": 4,
+  "w": 304,
+  "h": 317,
+  "anchorX": 115,
+  "anchorY": 314,
+  "figureH": 310
+ },
+ "zhaoyun/jump": {
+  "src": "anim/zhaoyun_jump.webp",
+  "frames": 4,
+  "w": 304,
+  "h": 369,
+  "anchorX": 109,
+  "anchorY": 366,
+  "figureH": 268
+ },
+ "zhaoyun/dodge": {
+  "src": "anim/zhaoyun_dodge.webp",
+  "frames": 4,
+  "w": 308,
+  "h": 242,
+  "anchorX": 109,
+  "anchorY": 239,
+  "figureH": 208
+ },
+ "zhaoyun/hurt": {
+  "src": "anim/zhaoyun_hurt.webp",
+  "frames": 2,
+  "w": 287,
+  "h": 232,
+  "anchorX": 101,
+  "anchorY": 228,
+  "figureH": 220
+ },
+ "zhaoyun/down": {
+  "src": "anim/zhaoyun_down.webp",
+  "frames": 2,
+  "w": 320,
+  "h": 182,
+  "anchorX": 128,
+  "anchorY": 179,
+  "figureH": 129
+ },
+ "guanyu/run": {
+  "src": "anim/guanyu_run.webp",
+  "frames": 8,
+  "w": 315,
+  "h": 339,
+  "anchorX": 130,
+  "anchorY": 336,
+  "figureH": 304
+ },
+ "guanyu/light1": {
+  "src": "anim/guanyu_light1.webp",
+  "frames": 4,
+  "w": 377,
+  "h": 293,
+  "anchorX": 134,
+  "anchorY": 290,
+  "figureH": 280
+ },
+ "guanyu/light2": {
+  "src": "anim/guanyu_light2.webp",
+  "frames": 4,
+  "w": 305,
+  "h": 282,
+  "anchorX": 157,
+  "anchorY": 279,
+  "figureH": 272
+ },
+ "guanyu/light3": {
+  "src": "anim/guanyu_light3.webp",
+  "frames": 4,
+  "w": 319,
+  "h": 299,
+  "anchorX": 123,
+  "anchorY": 296,
+  "figureH": 289
+ },
+ "guanyu/light4": {
+  "src": "anim/guanyu_light4.webp",
+  "frames": 4,
+  "w": 311,
+  "h": 346,
+  "anchorX": 116,
+  "anchorY": 343,
+  "figureH": 304
+ },
+ "guanyu/light5": {
+  "src": "anim/guanyu_light5.webp",
+  "frames": 8,
+  "w": 625,
+  "h": 344,
+  "anchorX": 302,
+  "anchorY": 340,
+  "figureH": 275
+ },
+ "guanyu/heavy": {
+  "src": "anim/guanyu_heavy.webp",
+  "frames": 8,
+  "w": 349,
+  "h": 380,
+  "anchorX": 136,
+  "anchorY": 377,
+  "figureH": 297
+ },
+ "guanyu/musou": {
+  "src": "anim/guanyu_musou.webp",
+  "frames": 8,
+  "w": 364,
+  "h": 380,
+  "anchorX": 144,
+  "anchorY": 375,
+  "figureH": 325
+ },
+ "guanyu/idle": {
+  "src": "anim/guanyu_idle.webp",
+  "frames": 4,
+  "w": 288,
+  "h": 300,
+  "anchorX": 122,
+  "anchorY": 296,
+  "figureH": 289
+ },
+ "guanyu/jump": {
+  "src": "anim/guanyu_jump.webp",
+  "frames": 4,
+  "w": 304,
+  "h": 357,
+  "anchorX": 130,
+  "anchorY": 354,
+  "figureH": 261
+ },
+ "guanyu/dodge": {
+  "src": "anim/guanyu_dodge.webp",
+  "frames": 4,
+  "w": 305,
+  "h": 283,
+  "anchorX": 132,
+  "anchorY": 280,
+  "figureH": 246
+ },
+ "guanyu/hurt": {
+  "src": "anim/guanyu_hurt.webp",
+  "frames": 2,
+  "w": 313,
+  "h": 258,
+  "anchorX": 136,
+  "anchorY": 255,
+  "figureH": 245
+ },
+ "guanyu/down": {
+  "src": "anim/guanyu_down.webp",
+  "frames": 2,
+  "w": 334,
+  "h": 196,
+  "anchorX": 149,
+  "anchorY": 193,
+  "figureH": 143
+ },
+ "zhangfei/run": {
+  "src": "anim/zhangfei_run.webp",
+  "frames": 8,
+  "w": 300,
+  "h": 336,
+  "anchorX": 123,
+  "anchorY": 333,
+  "figureH": 290
+ },
+ "zhangfei/light1": {
+  "src": "anim/zhangfei_light1.webp",
+  "frames": 4,
+  "w": 391,
+  "h": 276,
+  "anchorX": 142,
+  "anchorY": 273,
+  "figureH": 269
+ },
+ "zhangfei/light2": {
+  "src": "anim/zhangfei_light2.webp",
+  "frames": 4,
+  "w": 360,
+  "h": 272,
+  "anchorX": 136,
+  "anchorY": 268,
+  "figureH": 263
+ },
+ "zhangfei/light3": {
+  "src": "anim/zhangfei_light3.webp",
+  "frames": 4,
+  "w": 333,
+  "h": 293,
+  "anchorX": 132,
+  "anchorY": 290,
+  "figureH": 264
+ },
+ "zhangfei/light4": {
+  "src": "anim/zhangfei_light4.webp",
+  "frames": 4,
+  "w": 325,
+  "h": 345,
+  "anchorX": 117,
+  "anchorY": 342,
+  "figureH": 290
+ },
+ "zhangfei/light5": {
+  "src": "anim/zhangfei_light5.webp",
+  "frames": 8,
+  "w": 332,
+  "h": 360,
+  "anchorX": 135,
+  "anchorY": 356,
+  "figureH": 288
+ },
+ "zhangfei/heavy": {
+  "src": "anim/zhangfei_heavy.webp",
+  "frames": 8,
+  "w": 374,
+  "h": 376,
+  "anchorX": 156,
+  "anchorY": 372,
+  "figureH": 290
+ },
+ "zhangfei/musou": {
+  "src": "anim/zhangfei_musou.webp",
+  "frames": 8,
+  "w": 344,
+  "h": 385,
+  "anchorX": 156,
+  "anchorY": 382,
+  "figureH": 304
+ },
+ "zhangfei/idle": {
+  "src": "anim/zhangfei_idle.webp",
+  "frames": 4,
+  "w": 307,
+  "h": 306,
+  "anchorX": 133,
+  "anchorY": 303,
+  "figureH": 299
+ },
+ "zhangfei/jump": {
+  "src": "anim/zhangfei_jump.webp",
+  "frames": 4,
+  "w": 304,
+  "h": 363,
+  "anchorX": 128,
+  "anchorY": 360,
+  "figureH": 281
+ },
+ "zhangfei/dodge": {
+  "src": "anim/zhangfei_dodge.webp",
+  "frames": 4,
+  "w": 325,
+  "h": 287,
+  "anchorX": 133,
+  "anchorY": 284,
+  "figureH": 256
+ },
+ "zhangfei/hurt": {
+  "src": "anim/zhangfei_hurt.webp",
+  "frames": 2,
+  "w": 323,
+  "h": 281,
+  "anchorX": 135,
+  "anchorY": 278,
+  "figureH": 264
+ },
+ "zhangfei/down": {
+  "src": "anim/zhangfei_down.webp",
+  "frames": 2,
+  "w": 334,
+  "h": 237,
+  "anchorX": 157,
+  "anchorY": 234,
+  "figureH": 196
+ },
+ "saber/walk": {
+  "src": "anim/saber_walk.webp",
+  "frames": 4,
+  "w": 269,
+  "h": 353,
+  "anchorX": 118,
+  "anchorY": 350,
+  "figureH": 346
+ },
+ "saber/attack": {
+  "src": "anim/saber_attack.webp",
+  "frames": 4,
+  "w": 314,
+  "h": 354,
+  "anchorX": 152,
+  "anchorY": 351,
+  "figureH": 323
+ },
+ "saber/hurt": {
+  "src": "anim/saber_hurt.webp",
+  "frames": 2,
+  "w": 304,
+  "h": 311,
+  "anchorX": 134,
+  "anchorY": 308,
+  "figureH": 304
+ },
+ "saber/air": {
+  "src": "anim/saber_air.webp",
+  "frames": 2,
+  "w": 291,
+  "h": 368,
+  "anchorX": 148,
+  "anchorY": 365,
+  "figureH": 300
+ },
+ "saber/death": {
+  "src": "anim/saber_death.webp",
+  "frames": 4,
+  "w": 332,
+  "h": 264,
+  "anchorX": 133,
+  "anchorY": 261,
+  "figureH": 144
+ },
+ "archer/walk": {
+  "src": "anim/archer_walk.webp",
+  "frames": 4,
+  "w": 224,
+  "h": 375,
+  "anchorX": 107,
+  "anchorY": 372,
+  "figureH": 366
+ },
+ "archer/attack": {
+  "src": "anim/archer_attack.webp",
+  "frames": 4,
+  "w": 244,
+  "h": 371,
+  "anchorX": 105,
+  "anchorY": 368,
+  "figureH": 364
+ },
+ "archer/hurt": {
+  "src": "anim/archer_hurt.webp",
+  "frames": 2,
+  "w": 236,
+  "h": 354,
+  "anchorX": 130,
+  "anchorY": 351,
+  "figureH": 344
+ },
+ "archer/air": {
+  "src": "anim/archer_air.webp",
+  "frames": 2,
+  "w": 289,
+  "h": 370,
+  "anchorX": 138,
+  "anchorY": 367,
+  "figureH": 283
+ },
+ "archer/death": {
+  "src": "anim/archer_death.webp",
+  "frames": 4,
+  "w": 326,
+  "h": 313,
+  "anchorX": 135,
+  "anchorY": 310,
+  "figureH": 220
+ },
+ "shield/walk": {
+  "src": "anim/shield_walk.webp",
+  "frames": 4,
+  "w": 257,
+  "h": 305,
+  "anchorX": 156,
+  "anchorY": 302,
+  "figureH": 298
+ },
+ "shield/attack": {
+  "src": "anim/shield_attack.webp",
+  "frames": 4,
+  "w": 374,
+  "h": 292,
+  "anchorX": 181,
+  "anchorY": 288,
+  "figureH": 283
+ },
+ "shield/hurt": {
+  "src": "anim/shield_hurt.webp",
+  "frames": 2,
+  "w": 259,
+  "h": 316,
+  "anchorX": 148,
+  "anchorY": 312,
+  "figureH": 305
+ },
+ "shield/air": {
+  "src": "anim/shield_air.webp",
+  "frames": 2,
+  "w": 293,
+  "h": 364,
+  "anchorX": 168,
+  "anchorY": 361,
+  "figureH": 266
+ },
+ "shield/death": {
+  "src": "anim/shield_death.webp",
+  "frames": 4,
+  "w": 306,
+  "h": 242,
+  "anchorX": 145,
+  "anchorY": 239,
+  "figureH": 154
+ },
+ "cavalry/walk": {
+  "src": "anim/cavalry_walk.webp",
+  "frames": 4,
+  "w": 316,
+  "h": 281,
+  "anchorX": 164,
+  "anchorY": 278,
+  "figureH": 272
+ },
+ "cavalry/attack": {
+  "src": "anim/cavalry_attack.webp",
+  "frames": 4,
+  "w": 369,
+  "h": 337,
+  "anchorX": 165,
+  "anchorY": 334,
+  "figureH": 270
+ },
+ "cavalry/hurt": {
+  "src": "anim/cavalry_hurt.webp",
+  "frames": 2,
+  "w": 288,
+  "h": 355,
+  "anchorX": 156,
+  "anchorY": 352,
+  "figureH": 348
+ },
+ "cavalry/air": {
+  "src": "anim/cavalry_air.webp",
+  "frames": 2,
+  "w": 292,
+  "h": 377,
+  "anchorX": 162,
+  "anchorY": 374,
+  "figureH": 359
+ },
+ "cavalry/death": {
+  "src": "anim/cavalry_death.webp",
+  "frames": 4,
+  "w": 340,
+  "h": 337,
+  "anchorX": 181,
+  "anchorY": 334,
+  "figureH": 276
+ },
+ "zhangjiao/walk": {
+  "src": "anim/zhangjiao_walk.webp",
+  "frames": 4,
+  "w": 294,
+  "h": 360,
+  "anchorX": 147,
+  "anchorY": 357,
+  "figureH": 352
+ },
+ "zhangjiao/idle": {
+  "src": "anim/zhangjiao_idle.webp",
+  "frames": 4,
+  "w": 296,
+  "h": 379,
+  "anchorX": 137,
+  "anchorY": 376,
+  "figureH": 367
+ },
+ "zhangjiao/attack": {
+  "src": "anim/zhangjiao_attack.webp",
+  "frames": 8,
+  "w": 356,
+  "h": 389,
+  "anchorX": 139,
+  "anchorY": 386,
+  "figureH": 363
+ },
+ "zhangjiao/cast": {
+  "src": "anim/zhangjiao_cast.webp",
+  "frames": 4,
+  "w": 320,
+  "h": 339,
+  "anchorX": 152,
+  "anchorY": 336,
+  "figureH": 314
+ },
+ "zhangjiao/hurt": {
+  "src": "anim/zhangjiao_hurt.webp",
+  "frames": 2,
+  "w": 288,
+  "h": 296,
+  "anchorX": 136,
+  "anchorY": 292,
+  "figureH": 284
+ },
+ "zhangjiao/death": {
+  "src": "anim/zhangjiao_death.webp",
+  "frames": 2,
+  "w": 308,
+  "h": 232,
+  "anchorX": 158,
+  "anchorY": 229,
+  "figureH": 176
+ },
+ "lvbu/walk": {
+  "src": "anim/lvbu_walk.webp",
+  "frames": 4,
+  "w": 317,
+  "h": 357,
+  "anchorX": 134,
+  "anchorY": 354,
+  "figureH": 350
+ },
+ "lvbu/idle": {
+  "src": "anim/lvbu_idle.webp",
+  "frames": 4,
+  "w": 314,
+  "h": 357,
+  "anchorX": 133,
+  "anchorY": 354,
+  "figureH": 351
+ },
+ "lvbu/attack": {
+  "src": "anim/lvbu_attack.webp",
+  "frames": 8,
+  "w": 386,
+  "h": 333,
+  "anchorX": 124,
+  "anchorY": 330,
+  "figureH": 287
+ },
+ "lvbu/charge": {
+  "src": "anim/lvbu_charge.webp",
+  "frames": 4,
+  "w": 336,
+  "h": 288,
+  "anchorX": 122,
+  "anchorY": 284,
+  "figureH": 275
+ },
+ "lvbu/hurt": {
+  "src": "anim/lvbu_hurt.webp",
+  "frames": 2,
+  "w": 304,
+  "h": 278,
+  "anchorX": 117,
+  "anchorY": 275,
+  "figureH": 271
+ },
+ "lvbu/death": {
+  "src": "anim/lvbu_death.webp",
+  "frames": 2,
+  "w": 312,
+  "h": 231,
+  "anchorX": 128,
+  "anchorY": 228,
+  "figureH": 176
+ },
+ "vfx/slash": {
+  "src": "anim/vfx_slash.webp",
+  "frames": 8,
+  "w": 288,
+  "h": 384,
+  "anchorX": 144,
+  "anchorY": 192,
+  "blend": "lighter"
+ },
+ "vfx/slash_gold": {
+  "src": "anim/vfx_slash_gold.webp",
+  "frames": 8,
+  "w": 288,
+  "h": 384,
+  "anchorX": 144,
+  "anchorY": 192,
+  "blend": "lighter"
+ },
+ "vfx/thrust": {
+  "src": "anim/vfx_thrust.webp",
+  "frames": 8,
+  "w": 288,
+  "h": 384,
+  "anchorX": 144,
+  "anchorY": 192,
+  "blend": "lighter"
+ },
+ "vfx/impact": {
+  "src": "anim/vfx_impact.webp",
+  "frames": 8,
+  "w": 288,
+  "h": 384,
+  "anchorX": 144,
+  "anchorY": 192,
+  "blend": "lighter"
+ },
+ "vfx/fire": {
+  "src": "anim/vfx_fire.webp",
+  "frames": 8,
+  "w": 288,
+  "h": 384,
+  "anchorX": 144,
+  "anchorY": 192,
+  "blend": "lighter"
+ },
+ "vfx/lightning": {
+  "src": "anim/vfx_lightning.webp",
+  "frames": 8,
+  "w": 288,
+  "h": 384,
+  "anchorX": 144,
+  "anchorY": 192,
+  "blend": "lighter"
+ },
+ "vfx/dust": {
+  "src": "anim/vfx_dust.webp",
+  "frames": 8,
+  "w": 288,
+  "h": 384,
+  "anchorX": 144,
+  "anchorY": 192,
+  "blend": "lighter"
+ },
+ "vfx/dragon_azure": {
+  "src": "anim/vfx_dragon_azure.webp",
+  "frames": 8,
+  "w": 288,
+  "h": 384,
+  "anchorX": 144,
+  "anchorY": 192,
+  "blend": "lighter"
+ },
+ "vfx/dragon_green": {
+  "src": "anim/vfx_dragon_green.webp",
+  "frames": 8,
+  "w": 288,
+  "h": 384,
+  "anchorX": 144,
+  "anchorY": 192,
+  "blend": "lighter"
+ },
+ "vfx/shockwave": {
+  "src": "anim/vfx_shockwave.webp",
+  "frames": 8,
+  "w": 288,
+  "h": 384,
+  "anchorX": 144,
+  "anchorY": 192,
+  "blend": "lighter"
+ }
+}
