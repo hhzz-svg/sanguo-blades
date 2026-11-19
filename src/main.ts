@@ -280,6 +280,11 @@ function inputForTick(): TickInput {
 }
 
 function onKeyDown(event: KeyboardEvent): void {
+  if (event.code === 'Backquote') {
+    if (!event.repeat && screen === 'battle') renderer?.toggleFps();
+    event.preventDefault();
+    return;
+  }
   const key = event.key.toLowerCase();
   if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(key)) event.preventDefault();
   if (screen === 'hero' && ['1', '2', '3', 'arrowleft', 'arrowright'].includes(key)) {
@@ -375,10 +380,11 @@ function frame(now: number): void {
   if (screen === 'battle' && engine && renderer) {
     accumulator += elapsed;
     while (accumulator >= FIXED_DT) {
+      renderer.capturePrevious(engine.state);
       engine.tick(inputForTick());
       accumulator -= FIXED_DT;
     }
-    renderer.render(engine, elapsed);
+    renderer.render(engine, elapsed, accumulator / FIXED_DT);
     ui.updateBattle(engine.state);
     if (!engine.state.paused && engine.state.stageComplete && !modalShown) finishStage();
     if (engine.state.paused && !pauseShown) {

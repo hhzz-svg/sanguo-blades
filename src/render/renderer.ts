@@ -71,6 +71,18 @@ interface PlayerAttackTrack {
   initialTimer: number;
 }
 
+interface PositionSnapshot {
+  x: number;
+  y: number;
+  z: number;
+}
+
+interface CachedLayer {
+  canvas: HTMLCanvasElement;
+  dpr: number;
+  loaded: boolean;
+}
+
 export class BattleRenderer {
   readonly canvas: HTMLCanvasElement;
   private readonly context: CanvasRenderingContext2D;
@@ -84,11 +96,22 @@ export class BattleRenderer {
   private readonly burnVfxTimers = new Map<number, number>();
   private readonly seenDamageNumbers = new WeakSet<FloatingNumber>();
   private readonly seenLightningTelegraphs = new Set<number>();
+  private readonly backgrounds = new Map<1 | 2, CachedLayer>();
+  private readonly orbTexture: HTMLCanvasElement;
+  private vignetteLayer: CachedLayer | null = null;
+  private readonly previousEnemies = new Map<number, PositionSnapshot>();
+  private readonly previousProjectiles = new Map<number, PositionSnapshot>();
+  private previousPlayer: PositionSnapshot | null = null;
+  private previousCameraX: number | null = null;
   private lastEventIndex = 0;
   private lastAttackSerial = 0;
   private dustTimer = 0;
   private animationTime = 0;
-  private readonly dpr = Math.min(2, window.devicePixelRatio || 1);
+  private dpr = Math.min(2, window.devicePixelRatio || 1);
+  private frameIntervalEma = 1000 / 60;
+  private slowFrameSeconds = 0;
+  private fpsVisible = new URLSearchParams(window.location.search).has('fps');
+  private renderAlpha = 1;
   private readonly audio: AudioSynth;
   private activeAttack: PlayerAttackTrack | null = null;
   private lastPlayerX: number | null = null;
@@ -110,18 +133,43 @@ export class BattleRenderer {
     canvas.height = Math.round(HEIGHT * this.dpr);
     canvas.style.width = `${WIDTH}px`;
     canvas.style.height = `${HEIGHT}px`;
+    this.orbTexture = this.createOrbTexture();
   }
 
-  render(engine: GameEngine, elapsed = 1 / 60): void {
+  capturePrevious(state: GameState): void {
+    this.previousPlayer = { x: state.player.x, y: state.player.y, z: state.player.z };
+    this.previousCameraX = state.cameraX;
+    this.previousEnemies.clear();
+    for (const enemy of state.enemies) {
+      this.previousEnemies.set(enemy.id, { x: enemy.x, y: enemy.y, z: enemy.z });
+    }
+    this.previousProjectiles.clear();
+    for (const projectile of state.projectiles) {
+      this.previousProjectiles.set(projectile.id, { x: projectile.x, y: projectile.y, z: projectile.z });
+    }
+  }
+
+  toggleFps(): void {
+    this.fpsVisible = !this.fpsVisible;
+  }
+
+  render(engine: GameEngine, elapsed = 1 / 60, alpha = 1): void {
     const state = engine.state;
+    this.renderAlpha = clampValue(alpha, 0, 1);
+    this.updateFrameTiming(elapsed);
     this.activeAct = state.act;
     const context = this.context;
     this.animationTime += elapsed;
     this.handleEvents(engine);
     this.observeState(engine, elapsed);
+    const cameraX = this.interpolatePosition(
+      { x: state.cameraX, y: 0, z: 0 },
+      this.previousCameraX === null ? null : { x: this.previousCameraX, y: 0, z: 0 },
+    ).x;
     this.dustTimer -= elapsed;
     if (Math.abs(state.player.vx) > 12 && this.dustTimer <= 0) {
-      this.spawnParticles(2, '#b7a28b', state.player.x - state.cameraX, state.player.y - 7);
+      const playerPosition = this.interpolatePosition(state.player, this.previousPlayer);
+      this.spawnParticles(2, '#b7a28b', playerPosition.x - cameraX, playerPosition.y - 7);
       this.dustTimer = 0.14;
     }
     this.updateSpriteEffects(elapsed);
@@ -141,33 +189,37 @@ export class BattleRenderer {
     context.translate(WIDTH / 2, HEIGHT / 2);
     context.scale(zoom, zoom);
     context.translate(-WIDTH / 2, -HEIGHT / 2);
-    this.drawBackground(state.act, state.cameraX);
-    this.drawGround(state.cameraX);
-    this.drawTelegraphs(engine);
-    this.drawProjectiles(engine, state.cameraX);
+    this.drawBackground(state.act, cameraX);
+    this.drawGround(cameraX);
+    this.drawTelegraphs(engine, cameraX);
+    this.drawProjectiles(engine, cameraX);
     for (const image of engine.afterimages) {
       const frame = (1 - image.timer / 0.32) * 4;
-      const drawn = animationBank.drawAnim(context, `${state.heroId}/dodge`, frame, image.x - state.cameraX, image.y, 190, state.player.facing, {
+      const drawn = animationBank.drawAnim(context, `${state.heroId}/dodge`, frame, image.x - cameraX, image.y, 190, state.player.facing, {
         alpha: image.timer / 0.32 * 0.42,
         tint: 'blue',
       });
-      if (!drawn) this.assets.drawSprite(context, heroSpritePath(state.heroId, 'idle'), image.x - state.cameraX, image.y, 190, state.player.facing, { alpha: image.timer / 0.32 * 0.42 });
+      if (!drawn) this.assets.drawSprite(context, heroSpritePath(state.heroId, 'idle'), image.x - cameraX, image.y, 190, state.player.facing, { alpha: image.timer / 0.32 * 0.42 });
     }
-    this.drawRendererAfterimages(state.cameraX);
+    this.drawRendererAfterimages(cameraX);
     const renderables: Array<{ y: number; enemy: EnemyState | null; corpse: EnemyCorpse | null }> = [
-      ...state.enemies.map((enemy) => ({ y: enemy.y, enemy, corpse: null })),
+      ...state.enemies.map((enemy) => ({
+        y: this.interpolatePosition(enemy, this.previousEnemies.get(enemy.id)).y,
+        enemy,
+        corpse: null,
+      })),
       ...this.corpses.map((corpse) => ({ y: corpse.y, enemy: null, corpse })),
-      { y: state.player.y, enemy: null, corpse: null },
+      { y: this.interpolatePosition(state.player, this.previousPlayer).y, enemy: null, corpse: null },
     ];
     renderables.sort((a, b) => a.y - b.y);
     for (const item of renderables) {
-      if (item.enemy) this.drawEnemy(item.enemy, state.cameraX);
-      else if (item.corpse) this.drawCorpse(item.corpse, state.cameraX);
-      else this.drawPlayer(engine, state.cameraX);
+      if (item.enemy) this.drawEnemy(item.enemy, cameraX);
+      else if (item.corpse) this.drawCorpse(item.corpse, cameraX);
+      else this.drawPlayer(engine, cameraX);
     }
-    this.drawSpriteEffects(state.cameraX);
+    this.drawSpriteEffects(cameraX);
     this.drawParticles();
-    this.drawDamageNumbers(engine, state.cameraX);
+    this.drawDamageNumbers(engine, cameraX);
     this.drawVignette();
     if (state.musouSequence) {
       context.fillStyle = 'rgba(8, 6, 10, .34)';
@@ -179,19 +231,68 @@ export class BattleRenderer {
       context.fillRect(0, 0, WIDTH, HEIGHT);
       context.globalAlpha = 1;
     }
+    this.drawFpsOverlay();
     context.restore();
+  }
+
+  private updateFrameTiming(elapsed: number): void {
+    const interval = Math.max(0, elapsed * 1000);
+    const weight = 1 - Math.exp(-Math.max(elapsed, 0) / 0.5);
+    this.frameIntervalEma += (interval - this.frameIntervalEma) * weight;
+    if (this.dpr > 1 && this.frameIntervalEma > 22) {
+      this.slowFrameSeconds += elapsed;
+      if (this.slowFrameSeconds >= 2) {
+        this.dpr = this.dpr > 1.5 ? 1.5 : 1;
+        this.canvas.width = Math.round(WIDTH * this.dpr);
+        this.canvas.height = Math.round(HEIGHT * this.dpr);
+        this.context.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+        this.backgrounds.clear();
+        this.vignetteLayer = null;
+        this.slowFrameSeconds = 0;
+      }
+    } else {
+      this.slowFrameSeconds = 0;
+    }
+  }
+
+  private drawFpsOverlay(): void {
+    if (!this.fpsVisible) return;
+    const context = this.context;
+    const fps = this.frameIntervalEma > 0 ? Math.round(1000 / this.frameIntervalEma) : 0;
+    const label = `${fps} fps · ${this.frameIntervalEma.toFixed(1)} ms · dpr ${this.dpr.toFixed(1)}`;
+    context.save();
+    context.fillStyle = 'rgba(14, 11, 12, .82)';
+    context.fillRect(WIDTH - 207, 58, 197, 24);
+    context.font = '12px sans-serif';
+    context.textAlign = 'right';
+    context.textBaseline = 'middle';
+    context.fillStyle = '#e8d9b9';
+    context.fillText(label, WIDTH - 17, 70);
+    context.restore();
+  }
+
+  private interpolatePosition(current: PositionSnapshot, previous: PositionSnapshot | null | undefined): PositionSnapshot {
+    if (!previous || Math.hypot(current.x - previous.x, current.y - previous.y, current.z - previous.z) > 160) {
+      return current;
+    }
+    return {
+      x: previous.x + (current.x - previous.x) * this.renderAlpha,
+      y: previous.y + (current.y - previous.y) * this.renderAlpha,
+      z: previous.z + (current.z - previous.z) * this.renderAlpha,
+    };
   }
 
   private observeState(engine: GameEngine, elapsed: number): void {
     const state = engine.state;
     const player = state.player;
-    const previousPlayerX = this.lastPlayerX ?? player.x;
+    const playerPosition = this.interpolatePosition(player, this.previousPlayer);
+    const previousPlayerX = this.lastPlayerX ?? playerPosition.x;
     const inAir = player.airborne || player.z > 0;
     if (inAir && !this.playerWasAirborne) this.jumpElapsed = 0;
     else if (inAir) this.jumpElapsed += elapsed;
     if (!inAir && this.playerWasAirborne) {
       this.landingCrouch = 0.09;
-      this.spawnSpriteEffect('vfx/dust', player.x, player.y - 8, 112, player.facing, 0.42);
+      this.spawnSpriteEffect('vfx/dust', playerPosition.x, playerPosition.y - 8, 112, player.facing, 0.42);
     }
     this.landingCrouch = Math.max(0, this.landingCrouch - elapsed);
     this.playerWasAirborne = inAir;
@@ -206,16 +307,16 @@ export class BattleRenderer {
           heavy: player.lastAttackWasHeavy,
           initialTimer: Math.max(0.01, player.attackTimer),
         };
-        this.spawnAttackEffects(state, hitIndex, player.lastAttackWasHeavy, previousPlayerX);
+        this.spawnAttackEffects(state, hitIndex, player.lastAttackWasHeavy, previousPlayerX, playerPosition);
       } else {
         this.activeAttack = null;
       }
     }
 
     if (state.musouSequence && !this.wasMusouActive) this.startMusouEffects(state);
-    if (state.musouSequence?.heroId === 'zhaoyun' && Math.abs(player.x - previousPlayerX) > 20) {
-      this.spawnAfterimage('zhaoyun/musou', previousPlayerX, player.y - player.z, player.facing, 4);
-      this.spawnSpriteEffect('vfx/dust', player.x, player.y - 8, 132, player.facing, 0.42, 0, 0.78);
+    if (state.musouSequence?.heroId === 'zhaoyun' && Math.abs(playerPosition.x - previousPlayerX) > 20) {
+      this.spawnAfterimage('zhaoyun/musou', previousPlayerX, playerPosition.y - playerPosition.z, player.facing, 4);
+      this.spawnSpriteEffect('vfx/dust', playerPosition.x, playerPosition.y - 8, 132, player.facing, 0.42, 0, 0.78);
     }
     this.wasMusouActive = !!state.musouSequence;
 
@@ -292,10 +393,16 @@ export class BattleRenderer {
       this.spawnSpriteEffect('vfx/lightning', telegraph.x, telegraph.y - 120, 300, 1, 0.48, 0, 0.95);
     }
     if (this.seenLightningTelegraphs.size > 240) this.seenLightningTelegraphs.clear();
-    this.lastPlayerX = player.x;
+    this.lastPlayerX = playerPosition.x;
   }
 
-  private spawnAttackEffects(state: GameState, hitIndex: number, heavy: boolean, previousX: number): void {
+  private spawnAttackEffects(
+    state: GameState,
+    hitIndex: number,
+    heavy: boolean,
+    previousX: number,
+    position: PositionSnapshot,
+  ): void {
     const player = state.player;
     const facing = player.facing;
     if (!heavy) {
@@ -307,30 +414,30 @@ export class BattleRenderer {
       const finisher = hitIndex === 4;
       this.spawnSpriteEffect(
         key,
-        player.x + facing * (state.heroId === 'guanyu' ? 78 : 62),
-        player.y - player.z - 100,
+        position.x + facing * (state.heroId === 'guanyu' ? 78 : 62),
+        position.y - position.z - 100,
         finisher ? 248 : state.heroId === 'guanyu' ? 142 : 174,
         facing,
         Math.max(0.24, player.attackTimer + 0.08),
         0,
         0.92,
       );
-      if (finisher) this.spawnSpriteEffect('vfx/dust', player.x, player.y - 8, 165, facing, 0.48);
+      if (finisher) this.spawnSpriteEffect('vfx/dust', position.x, position.y - 8, 165, facing, 0.48);
       return;
     }
     if (state.heroId === 'zhaoyun') {
-      const endX = player.x;
+      const endX = position.x;
       const startX = Math.abs(endX - previousX) > 25 ? previousX : endX - facing * 180;
       for (let index = 0; index < 4; index += 1) {
         const progress = index / 3;
         const x = startX + (endX - startX) * progress;
-        this.spawnSpriteEffect('vfx/thrust', x, player.y - player.z - 105, 178, facing, 0.34, 0, 0.88);
-        this.spawnAfterimage('zhaoyun/heavy', x, player.y - player.z, facing, index + 2);
+        this.spawnSpriteEffect('vfx/thrust', x, position.y - position.z - 105, 178, facing, 0.34, 0, 0.88);
+        this.spawnAfterimage('zhaoyun/heavy', x, position.y - position.z, facing, index + 2);
       }
     } else if (state.heroId === 'zhangfei') {
-      this.spawnSpriteEffect('vfx/shockwave', player.x, player.y - 35, 330, facing, 0.68, 0, 0.92);
+      this.spawnSpriteEffect('vfx/shockwave', position.x, position.y - 35, 330, facing, 0.68, 0, 0.92);
     }
-    if (state.heroId === 'zhaoyun') this.spawnSpriteEffect('vfx/dust', player.x, player.y - 8, 125, facing, 0.42, 0, 0.8);
+    if (state.heroId === 'zhaoyun') this.spawnSpriteEffect('vfx/dust', position.x, position.y - 8, 125, facing, 0.42, 0, 0.8);
   }
 
   private startMusouEffects(state: GameState): void {
@@ -424,32 +531,44 @@ export class BattleRenderer {
     const context = this.context;
     const path = `scenes/act${act}_bg.jpg`;
     const image = this.assets.load(path);
-    if (!image.complete || !image.naturalWidth) {
-      const sky = context.createLinearGradient(0, 0, 0, HEIGHT);
-      sky.addColorStop(0, '#191518');
-      sky.addColorStop(0.65, act === 1 ? '#40312b' : '#27191a');
-      sky.addColorStop(1, '#171213');
-      context.fillStyle = sky;
-      context.fillRect(0, 0, WIDTH, HEIGHT);
-      this.drawFallbackMountains(act);
-      return;
+    const loaded = image.complete && image.naturalWidth > 0;
+    let layer = this.backgrounds.get(act);
+    if (!layer || layer.dpr !== this.dpr || layer.loaded !== loaded) {
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(WIDTH * this.dpr);
+      canvas.height = Math.round(HEIGHT * this.dpr);
+      const layerContext = canvas.getContext('2d');
+      if (!layerContext) return;
+      layerContext.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+      if (loaded) {
+        layerContext.drawImage(image, 0, 0, WIDTH, HEIGHT);
+        layerContext.fillStyle = 'rgba(11, 10, 12, .1)';
+        layerContext.fillRect(0, 0, WIDTH, HEIGHT);
+      } else {
+        const sky = layerContext.createLinearGradient(0, 0, 0, HEIGHT);
+        sky.addColorStop(0, '#191518');
+        sky.addColorStop(0.65, act === 1 ? '#40312b' : '#27191a');
+        sky.addColorStop(1, '#171213');
+        layerContext.fillStyle = sky;
+        layerContext.fillRect(0, 0, WIDTH, HEIGHT);
+        this.drawFallbackMountains(layerContext, act);
+      }
+      layer = { canvas, dpr: this.dpr, loaded };
+      this.backgrounds.set(act, layer);
     }
     const tileWidth = 1280;
     const offset = -((cameraX * 0.2) % tileWidth);
     for (let x = offset - tileWidth; x < WIDTH + tileWidth; x += tileWidth * 2) {
-      context.drawImage(image, x, 0, tileWidth, HEIGHT);
+      context.drawImage(layer.canvas, x, 0, tileWidth, HEIGHT);
       context.save();
       context.translate(x + tileWidth * 2, 0);
       context.scale(-1, 1);
-      context.drawImage(image, 0, 0, tileWidth, HEIGHT);
+      context.drawImage(layer.canvas, 0, 0, tileWidth, HEIGHT);
       context.restore();
     }
-    context.fillStyle = 'rgba(11, 10, 12, .1)';
-    context.fillRect(0, 0, WIDTH, HEIGHT);
   }
 
-  private drawFallbackMountains(act: 1 | 2): void {
-    const context = this.context;
+  private drawFallbackMountains(context: CanvasRenderingContext2D, act: 1 | 2): void {
     context.fillStyle = act === 1 ? '#302421' : '#24191b';
     context.beginPath();
     context.moveTo(0, 460);
@@ -479,9 +598,10 @@ export class BattleRenderer {
   private drawPlayer(engine: GameEngine, cameraX: number): void {
     const { state } = engine;
     const player = state.player;
+    const position = this.interpolatePosition(player, this.previousPlayer);
     const hero = getHero(state.heroId);
-    const x = player.x - cameraX;
-    const footY = player.y - player.z;
+    const x = position.x - cameraX;
+    const footY = position.y - position.z;
     const dead = player.hp <= 0 || (state.gameOver && !state.victory);
     let key = `${state.heroId}/idle`;
     let frame = Math.floor(this.animationTime * 6);
@@ -513,7 +633,7 @@ export class BattleRenderer {
       const speed = Math.max(Math.abs(player.vx) / hero.speed, Math.abs(player.vz) / (hero.speed * 0.58));
       frame = this.animationTime * 8 / 0.55 * Math.max(0.2, Math.min(1, speed));
     }
-    this.drawShadow(x, player.y, 38);
+    this.drawShadow(x, position.y, 38);
     const weapon = hero.id === 'guanyu' ? 'guandao' : hero.id === 'zhangfei' ? 'axe' : 'spear';
     const fallbackPose = key.endsWith('/heavy') || key.endsWith('/musou')
       ? 'skill'
@@ -533,20 +653,25 @@ export class BattleRenderer {
   }
 
   private drawEnemy(enemy: EnemyState, cameraX: number): void {
-    const x = enemy.x - cameraX;
-    const footY = enemy.y - enemy.z;
+    const position = this.interpolatePosition(enemy, this.previousEnemies.get(enemy.id));
+    const x = position.x - cameraX;
+    const footY = position.y - position.z;
     if (x < -350 || x > WIDTH + 350) return;
-    this.drawShadow(x, enemy.y, enemy.boss ? 56 : 34);
+    this.drawShadow(x, position.y, enemy.boss ? 56 : 34);
     const height = enemy.boss ? 260 : enemy.kind === 'cavalry' ? 200 : 170;
     if (enemy.boss && enemy.phase === 2) {
       this.context.save();
-      this.context.globalAlpha = 0.38 + Math.sin(this.animationTime * 11) * 0.12;
+      const auraAlpha = 0.38 + Math.sin(this.animationTime * 11) * 0.12;
       this.context.strokeStyle = '#bf242b';
-      this.context.shadowColor = '#f02f32';
-      this.context.shadowBlur = 24;
+      this.context.globalAlpha = auraAlpha * 0.22;
+      this.context.lineWidth = 24;
+      this.context.beginPath();
+      this.context.ellipse(x, position.y - 92, 98, 112, this.animationTime * 0.7, 0, Math.PI * 2);
+      this.context.stroke();
+      this.context.globalAlpha = auraAlpha;
       this.context.lineWidth = 8;
       this.context.beginPath();
-      this.context.ellipse(x, enemy.y - 92, 98, 112, this.animationTime * 0.7, 0, Math.PI * 2);
+      this.context.ellipse(x, position.y - 92, 98, 112, this.animationTime * 0.7, 0, Math.PI * 2);
       this.context.stroke();
       this.context.restore();
     }
@@ -554,9 +679,11 @@ export class BattleRenderer {
       const affixColor = enemy.affix === '铁甲' ? '#79c7e8' : enemy.affix === '嗜血' ? '#8bd47e' : '#f26a55';
       this.context.save();
       this.context.strokeStyle = affixColor;
-      this.context.shadowColor = affixColor;
-      this.context.shadowBlur = 18;
-      this.context.globalAlpha = 0.72 + Math.sin(this.animationTime * 7) * 0.15;
+      const outlineAlpha = 0.72 + Math.sin(this.animationTime * 7) * 0.15;
+      this.context.globalAlpha = outlineAlpha * 0.22;
+      this.context.lineWidth = 9;
+      this.context.strokeRect(x - 32, footY - height + 7, 64, height - 13);
+      this.context.globalAlpha = outlineAlpha;
       this.context.lineWidth = 3;
       this.context.strokeRect(x - 32, footY - height + 7, 64, height - 13);
       this.context.restore();
@@ -588,8 +715,9 @@ export class BattleRenderer {
         this.context.fillStyle = enemy.affix === '铁甲' ? '#a8def1' : enemy.affix === '嗜血' ? '#b5e29b' : '#ff9877';
         this.context.font = '700 12px "Noto Serif SC", serif';
         this.context.textAlign = 'center';
-        this.context.shadowColor = '#000';
-        this.context.shadowBlur = 4;
+        this.context.fillStyle = 'rgba(16, 10, 9, .9)';
+        this.context.fillText(enemy.affix ?? '精锐', x + 1, barY - 3);
+        this.context.fillStyle = enemy.affix === '铁甲' ? '#a8def1' : enemy.affix === '嗜血' ? '#b5e29b' : '#ff9877';
         this.context.fillText(enemy.affix ?? '精锐', x, barY - 4);
       }
       this.context.restore();
@@ -788,9 +916,8 @@ export class BattleRenderer {
     context.restore();
   }
 
-  private drawTelegraphs(engine: GameEngine): void {
+  private drawTelegraphs(engine: GameEngine, cameraX: number): void {
     const context = this.context;
-    const cameraX = engine.state.cameraX;
     for (const enemy of engine.state.enemies) {
       if (enemy.telegraph <= 0 && enemy.action !== 'charging') continue;
       const x = enemy.x - cameraX;
@@ -799,46 +926,53 @@ export class BattleRenderer {
       context.globalAlpha = alpha;
       context.strokeStyle = '#ef4037';
       context.fillStyle = 'rgba(210, 40, 34, .12)';
-      context.shadowColor = '#f04438';
-      context.shadowBlur = 14;
-      context.lineWidth = enemy.boss ? 4 : 3;
+      const lineWidth = enemy.boss ? 4 : 3;
+      const strokeGlow = (): void => {
+        context.globalAlpha = alpha * 0.22;
+        context.lineWidth = lineWidth * 3;
+        context.stroke();
+        context.globalAlpha = alpha;
+        context.lineWidth = lineWidth;
+        context.stroke();
+      };
+      context.lineWidth = lineWidth;
       if (enemy.telegraphKind === 'charge') {
         const endX = x + enemy.facing * Math.min(900, enemy.chargeRemaining || 900);
         context.beginPath();
         context.moveTo(x, enemy.y + 2);
         context.lineTo(endX, enemy.y + 2);
-        context.stroke();
+        strokeGlow();
         context.setLineDash([10, 8]);
         context.beginPath();
         context.moveTo(x, enemy.y - 12);
         context.lineTo(endX, enemy.y - 12);
-        context.stroke();
+        strokeGlow();
       } else if (enemy.telegraphKind === 'sweep') {
         context.beginPath();
         context.ellipse(x + enemy.facing * 100, enemy.y - 90, 180, 88, 0, -1.15, 1.15);
         context.fill();
-        context.stroke();
+        strokeGlow();
         context.setLineDash([8, 6]);
         context.beginPath();
         context.arc(x, enemy.y - 90, 190, enemy.facing > 0 ? -1.15 : Math.PI - 1.15, enemy.facing > 0 ? 1.15 : Math.PI + 1.15);
-        context.stroke();
+        strokeGlow();
       } else if (enemy.telegraphKind === 'slam') {
         context.beginPath();
         context.ellipse(x, enemy.y, 72 + (1 - enemy.timer / 0.55) * 100, 25 + (1 - enemy.timer / 0.55) * 30, 0, 0, Math.PI * 2);
         context.fill();
-        context.stroke();
+        strokeGlow();
       } else if (enemy.telegraphKind === 'orb' || enemy.telegraphKind === 'teleport') {
         context.beginPath();
         context.arc(x, enemy.y - 88, enemy.telegraphKind === 'orb' ? 34 : 54, 0, Math.PI * 2);
-        context.stroke();
+        strokeGlow();
         context.beginPath();
         context.arc(x, enemy.y - 88, enemy.telegraphKind === 'orb' ? 20 : 34, this.animationTime * 2, this.animationTime * 2 + Math.PI * 1.4);
-        context.stroke();
+        strokeGlow();
       } else {
         context.beginPath();
         context.ellipse(x + enemy.facing * 55, enemy.y - 16, enemy.boss ? 190 : 95, 34, 0, 0, Math.PI * 2);
         context.fill();
-        context.stroke();
+        strokeGlow();
       }
       context.restore();
     }
@@ -849,12 +983,12 @@ export class BattleRenderer {
         ? telegraph.radius
         : telegraph.maxRadius * progress;
       context.save();
-      context.globalAlpha = telegraph.timer >= telegraph.duration ? 0.88 : 0.25 + progress * 0.44;
+      const telegraphAlpha = telegraph.timer >= telegraph.duration ? 0.88 : 0.25 + progress * 0.44;
+      context.globalAlpha = telegraphAlpha;
       context.strokeStyle = telegraph.owner === 'player' ? '#f5d36b' : '#f23830';
       context.fillStyle = telegraph.owner === 'player' ? 'rgba(246, 208, 94, .13)' : 'rgba(225, 45, 36, .14)';
-      context.shadowColor = context.strokeStyle;
-      context.shadowBlur = telegraph.kind === 'lightning' ? 18 : 10;
-      context.lineWidth = telegraph.kind === 'lightning' ? 3 : 4;
+      const lineWidth = telegraph.kind === 'lightning' ? 3 : 4;
+      context.lineWidth = lineWidth;
       context.beginPath();
       if (telegraph.kind === 'lightning') {
         context.ellipse(x, telegraph.y, radius, radius * 0.32, 0, 0, Math.PI * 2);
@@ -862,6 +996,11 @@ export class BattleRenderer {
         context.ellipse(x, telegraph.y, radius, radius * 0.32, 0, 0, Math.PI * 2);
       }
       context.fill();
+      context.globalAlpha = telegraphAlpha * 0.22;
+      context.lineWidth = lineWidth * 3;
+      context.stroke();
+      context.globalAlpha = telegraphAlpha;
+      context.lineWidth = lineWidth;
       context.stroke();
       context.restore();
     }
@@ -870,17 +1009,24 @@ export class BattleRenderer {
   private drawProjectiles(engine: GameEngine, cameraX: number): void {
     const context = this.context;
     for (const projectile of engine.state.projectiles) {
-      const x = projectile.x - cameraX;
-      const y = projectile.y - projectile.z;
+      const position = this.interpolatePosition(projectile, this.previousProjectiles.get(projectile.id));
+      const x = position.x - cameraX;
+      const y = position.y - position.z;
       const angle = Math.atan2(projectile.vy, projectile.vx);
       context.save();
       context.translate(x, y);
       context.rotate(angle);
       context.globalAlpha = Math.min(1, projectile.lifetime * 2);
       if (projectile.kind === 'arrow') {
+        const alpha = context.globalAlpha;
         context.strokeStyle = '#e9d7ad';
-        context.shadowColor = '#ffcf82';
-        context.shadowBlur = 8;
+        context.globalAlpha = alpha * 0.25;
+        context.lineWidth = 9;
+        context.beginPath();
+        context.moveTo(-22, 0);
+        context.lineTo(12, 0);
+        context.stroke();
+        context.globalAlpha = alpha;
         context.lineWidth = 3;
         context.beginPath();
         context.moveTo(-22, 0);
@@ -899,9 +1045,14 @@ export class BattleRenderer {
           context.restore();
           continue;
         }
+        const alpha = context.globalAlpha;
         context.strokeStyle = projectile.owner === 'player' ? '#c5f1ec' : '#f7cb68';
-        context.shadowColor = context.strokeStyle;
-        context.shadowBlur = 20;
+        context.globalAlpha = alpha * 0.22;
+        context.lineWidth = 30;
+        context.beginPath();
+        context.arc(0, 0, 28, -1.1, 1.1);
+        context.stroke();
+        context.globalAlpha = alpha;
         context.lineWidth = 10;
         context.beginPath();
         context.arc(0, 0, 28, -1.1, 1.1);
@@ -912,16 +1063,8 @@ export class BattleRenderer {
         context.arc(0, 0, 21, -0.9, 0.9);
         context.stroke();
       } else {
-        const orbGradient = context.createRadialGradient(-5, -5, 2, 0, 0, projectile.radius + 8);
-        orbGradient.addColorStop(0, '#fff3c7');
-        orbGradient.addColorStop(0.35, '#f6c849');
-        orbGradient.addColorStop(1, 'rgba(202, 62, 36, 0)');
-        context.fillStyle = orbGradient;
-        context.shadowColor = '#f6a333';
-        context.shadowBlur = 18;
-        context.beginPath();
-        context.arc(0, 0, projectile.radius + 8, 0, Math.PI * 2);
-        context.fill();
+        const diameter = (projectile.radius + 8) * 2;
+        context.drawImage(this.orbTexture, -diameter / 2, -diameter / 2, diameter, diameter);
       }
       context.restore();
     }
@@ -1034,10 +1177,35 @@ export class BattleRenderer {
 
   private drawVignette(): void {
     const context = this.context;
-    const gradient = context.createRadialGradient(WIDTH / 2, HEIGHT / 2, 200, WIDTH / 2, HEIGHT / 2, 760);
-    gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
-    gradient.addColorStop(1, 'rgba(5, 4, 5, .48)');
+    if (!this.vignetteLayer || this.vignetteLayer.dpr !== this.dpr) {
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(WIDTH * this.dpr);
+      canvas.height = Math.round(HEIGHT * this.dpr);
+      const layerContext = canvas.getContext('2d');
+      if (!layerContext) return;
+      layerContext.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+      const gradient = layerContext.createRadialGradient(WIDTH / 2, HEIGHT / 2, 200, WIDTH / 2, HEIGHT / 2, 760);
+      gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+      gradient.addColorStop(1, 'rgba(5, 4, 5, .48)');
+      layerContext.fillStyle = gradient;
+      layerContext.fillRect(0, 0, WIDTH, HEIGHT);
+      this.vignetteLayer = { canvas, dpr: this.dpr, loaded: true };
+    }
+    context.drawImage(this.vignetteLayer.canvas, 0, 0, WIDTH, HEIGHT);
+  }
+
+  private createOrbTexture(): HTMLCanvasElement {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const context = canvas.getContext('2d');
+    if (!context) return canvas;
+    const gradient = context.createRadialGradient(27, 27, 2, 32, 32, 32);
+    gradient.addColorStop(0, '#fff3c7');
+    gradient.addColorStop(0.35, '#f6c849');
+    gradient.addColorStop(1, 'rgba(202, 62, 36, 0)');
     context.fillStyle = gradient;
-    context.fillRect(0, 0, WIDTH, HEIGHT);
+    context.fillRect(0, 0, 64, 64);
+    return canvas;
   }
 }
