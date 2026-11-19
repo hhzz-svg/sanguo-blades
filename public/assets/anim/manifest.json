@@ -698,8 +698,7 @@
   "w": 288,
   "h": 384,
   "anchorX": 144,
-  "anchorY": 192,
-  "blend": "lighter"
+  "anchorY": 192
  },
  "vfx/dragon_azure": {
   "src": "anim/vfx_dragon_azure.webp",
