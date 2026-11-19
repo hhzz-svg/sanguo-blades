@@ -5,6 +5,7 @@ import { offerBlessings } from './engine/blessings';
 import { defaultSave, loadSave, saveData, type SaveData } from './engine/save';
 import { TALENTS } from './data/talents';
 import { AudioSynth } from './render/audio';
+import { animationBank } from './render/animations';
 import { BattleRenderer } from './render/renderer';
 import { GameUI, type UiAction } from './ui/ui';
 import type { GameState, TickInput } from './engine/types';
@@ -22,6 +23,7 @@ let engine: GameEngine | null = null;
 let renderer: BattleRenderer | null = null;
 let screen: 'title' | 'hero' | 'intro' | 'battle' | 'talents' | 'guide' | 'result' = 'title';
 let resultSaved = false;
+let defeatElapsed = 0;
 let modalShown = false;
 let pauseShown = false;
 let lastFrame = 0;
@@ -36,12 +38,15 @@ const queued: { dodge: boolean; jump: boolean; pause: boolean; proceed: boolean 
 };
 const ui = new GameUI(root, handleAction, audio);
 ui.showTitle(saved);
+const reportAnimationProgress = (progress: Parameters<typeof ui.updateAnimationProgress>[0]): void => ui.updateAnimationProgress(progress);
+void animationBank.load(reportAnimationProgress);
 
 declare global {
   interface Window {
     __SANGUO__: {
       getState: () => GameState | null;
       engine: GameEngine | null;
+      getAnimationProgress: () => ReturnType<typeof animationBank.getProgress>;
     };
   }
 }
@@ -51,6 +56,7 @@ window.__SANGUO__ = {
   get engine() {
     return engine;
   },
+  getAnimationProgress: () => animationBank.getProgress(),
 };
 
 function handleAction(action: UiAction): void {
@@ -76,7 +82,7 @@ function handleAction(action: UiAction): void {
       beginRun();
       break;
     case 'intro-start':
-      mountBattle();
+      void mountBattle();
       break;
     case 'pause':
       if (engine) {
@@ -117,19 +123,31 @@ function beginRun(): void {
   const hero = HEROES.some(({ id }) => id === ui.selectedHero) ? ui.selectedHero : 'zhaoyun';
   engine = new GameEngine({ heroId: hero, seed: Date.now(), talents: saved.talents });
   resultSaved = false;
+  defeatElapsed = 0;
   modalShown = false;
   screen = 'intro';
   ui.showActIntro(1);
 }
 
-function mountBattle(): void {
-  if (!engine) engine = new GameEngine({ heroId: ui.selectedHero, seed: Date.now(), talents: saved.talents });
-  const canvas = ui.showBattle();
-  renderer = new BattleRenderer(canvas, audio);
-  screen = 'battle';
-  audio.startBgm();
-  ui.updateBattle(engine.state);
-  setupTouchControls();
+let battleMounting = false;
+
+async function mountBattle(): Promise<void> {
+  if (battleMounting) return;
+  battleMounting = true;
+  try {
+    if (!engine) engine = new GameEngine({ heroId: ui.selectedHero, seed: Date.now(), talents: saved.talents });
+    const selectedEngine = engine;
+    await animationBank.load(reportAnimationProgress);
+    if (!engine || engine !== selectedEngine) return;
+    const canvas = ui.showBattle();
+    renderer = new BattleRenderer(canvas, audio);
+    screen = 'battle';
+    audio.startBgm();
+    ui.updateBattle(engine.state);
+    setupTouchControls();
+  } finally {
+    battleMounting = false;
+  }
 }
 
 function upgradeTalent(id: string): boolean {
@@ -374,7 +392,10 @@ function frame(now: number): void {
       pauseShown = false;
       clearBattleModal();
     }
-    if (engine.state.gameOver && !resultSaved) finishRun();
+    if (engine.state.gameOver && !resultSaved) {
+      if (!engine.state.victory && engine.state.player.hp <= 0 && defeatElapsed < 0.5) defeatElapsed += elapsed;
+      else finishRun();
+    }
   }
   requestAnimationFrame(frame);
 }

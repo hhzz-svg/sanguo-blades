@@ -5,6 +5,7 @@ import { BLESSINGS, type BlessingDefinition } from '../data/blessings';
 import { defaultSave, type SaveData } from '../engine/save';
 import type { GameState } from '../engine/types';
 import type { OwnedBlessings } from '../engine/blessings';
+import type { AnimationProgress } from '../render/animations';
 import type { AudioSynth } from '../render/audio';
 
 const BASE = import.meta.env.BASE_URL;
@@ -26,6 +27,7 @@ export type UiAction =
 export class GameUI {
   readonly root: HTMLElement;
   selectedHero: HeroId = 'zhaoyun';
+  private animationProgress: AnimationProgress = { loaded: 0, total: 0, ready: false };
 
   constructor(root: HTMLElement, private readonly onAction: (action: UiAction) => void, private readonly audio: AudioSynth) {
     this.root = root;
@@ -46,6 +48,7 @@ export class GameUI {
             <button class="button ghost" data-action="talents">演武场</button>
             <button class="button ghost" data-action="guide">兵书 · 操作指南</button>
           </div>
+          ${this.animationLoadingMarkup()}
           <div class="title-meta">已立功勋 <strong>${save.merit}</strong><span>纹银铸就不灭英名</span></div>
         </div>
         <div class="title-footer"><span>《三国·破阵》</span><span>一骑当千 · 乱世征途</span><button data-action="audio" class="audio-toggle">♫ 音效 ${this.audioLabel()}</button></div>
@@ -70,7 +73,7 @@ export class GameUI {
       </button>`).join('');
     this.root.innerHTML = `
       <main class="screen parchment-screen">
-        <header class="screen-heading"><button class="back-button" data-action="title">← 返回</button><div class="eyebrow">择良将 · 赴沙场</div><h2>选择你的武将</h2><p>各怀绝技，皆可破阵</p></header>
+        <header class="screen-heading"><button class="back-button" data-action="title">← 返回</button><div class="eyebrow">择良将 · 赴沙场</div><h2>选择你的武将</h2><p>各怀绝技，皆可破阵</p>${this.animationLoadingMarkup()}</header>
         <section class="hero-select-grid">${cards}</section>
         <div class="hero-actions"><span>← → 选择武将　　按 Enter 出征</span><button class="button primary" data-action="hero-confirm">披甲出征 <span>➜</span></button></div>
       </main>`;
@@ -92,7 +95,7 @@ export class GameUI {
       <main class="screen act-intro" style="--scene:url('${assetUrl(`scenes/act${act}_bg.jpg`)}')">
         <div class="intro-mist"></div><div class="intro-mark">第 ${act} 幕</div>
         <div class="intro-content"><div class="eyebrow">风云再起 · 乱世征途</div><h2>${intro.title}</h2><div class="title-rule"><i></i><b>✦</b><i></i></div>
-          <p>${intro.lines[0]}</p><p>${intro.lines[1]}</p><button class="button primary" data-action="intro-start">踏入战场 <span>➜</span></button>
+          <p>${intro.lines[0]}</p><p>${intro.lines[1]}</p>${this.animationLoadingMarkup()}<button class="button primary" data-action="intro-start">踏入战场 <span>➜</span></button>
         </div>
       </main>`;
     this.bindActions();
@@ -262,6 +265,25 @@ export class GameUI {
         if (action) this.onAction(action);
       });
     });
+  }
+
+  updateAnimationProgress(progress: AnimationProgress): void {
+    this.animationProgress = progress;
+    const percent = progress.total ? Math.floor(progress.loaded / progress.total * 100) : progress.ready ? 100 : 0;
+    this.root.querySelectorAll<HTMLElement>('.asset-loading').forEach((loading) => {
+      const bar = loading.querySelector<HTMLElement>('.asset-loading-bar i');
+      if (bar) bar.style.width = `${percent}%`;
+      const label = loading.querySelector<HTMLElement>('.asset-loading-label');
+      if (label) label.textContent = progress.ready ? '帧动画已就绪' : `载入帧动画 ${percent}%`;
+      loading.classList.toggle('ready', progress.ready);
+      loading.setAttribute('aria-valuenow', String(percent));
+    });
+  }
+
+  private animationLoadingMarkup(): string {
+    const { loaded, total, ready } = this.animationProgress;
+    const percent = total ? Math.floor(loaded / total * 100) : ready ? 100 : 0;
+    return `<div class="asset-loading${ready ? ' ready' : ''}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"><span class="asset-loading-label">${ready ? '帧动画已就绪' : `载入帧动画 ${percent}%`}</span><span class="asset-loading-bar"><i style="width:${percent}%"></i></span></div>`;
   }
 
   private setText(selector: string, text: string): void {
