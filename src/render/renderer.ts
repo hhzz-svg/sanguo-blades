@@ -1,5 +1,5 @@
 import { ENEMIES } from '../data/enemies';
-import { getHero } from '../data/heroes';
+import { getHero, type HeroId } from '../data/heroes';
 import { AssetLoader, enemySpritePath, heroSpritePath } from './assets';
 import type { GameEngine } from '../engine/engine';
 import type { EnemyState } from '../engine/types';
@@ -7,6 +7,10 @@ import { AudioSynth } from './audio';
 
 const WIDTH = 1280;
 const HEIGHT = 720;
+
+function clampValue(value: number, minimum: number, maximum: number): number {
+  return Math.max(minimum, Math.min(maximum, value));
+}
 
 interface Particle {
   x: number;
@@ -19,14 +23,26 @@ interface Particle {
   size: number;
 }
 
+interface SlashEffect {
+  x: number;
+  y: number;
+  facing: 1 | -1;
+  heroId: HeroId;
+  hitIndex: number;
+  heavy: boolean;
+  age: number;
+  duration: number;
+}
+
 export class BattleRenderer {
   readonly canvas: HTMLCanvasElement;
   private readonly context: CanvasRenderingContext2D;
   private readonly assets = new AssetLoader();
   private readonly particles: Particle[] = [];
+  private readonly slashEffects: SlashEffect[] = [];
   private lastEventIndex = 0;
-  private lastAttackTimer = 0;
-  private slashAge = 1;
+  private lastAttackSerial = 0;
+  private dustTimer = 0;
   private animationTime = 0;
   private readonly dpr = Math.min(2, window.devicePixelRatio || 1);
   private readonly audio: AudioSynth;
@@ -46,12 +62,31 @@ export class BattleRenderer {
   render(engine: GameEngine, elapsed = 1 / 60): void {
     const state = engine.state;
     this.activeAct = state.act;
-    this.activeAct = state.act;
     const context = this.context;
     this.animationTime += elapsed;
-    this.handleEvents(state.events);
-    if (state.player.attackTimer > 0 && this.lastAttackTimer <= 0) this.slashAge = 0;
-    this.lastAttackTimer = state.player.attackTimer;
+    this.handleEvents(engine);
+    if (state.player.attackSerial !== this.lastAttackSerial) {
+      this.slashEffects.push({
+        x: state.player.x,
+        y: state.player.y - state.player.z - 94,
+        facing: state.player.facing,
+        heroId: state.heroId,
+        hitIndex: state.player.comboFinished ? 4 : Math.max(0, state.player.comboIndex - 1),
+        heavy: state.player.lastAttackWasHeavy,
+        age: 0,
+        duration: state.player.lastAttackWasHeavy ? 0.38 : 0.3,
+      });
+      this.lastAttackSerial = state.player.attackSerial;
+    }
+    for (const slash of this.slashEffects) slash.age += elapsed;
+    for (let index = this.slashEffects.length - 1; index >= 0; index -= 1) {
+      if (this.slashEffects[index]!.age >= this.slashEffects[index]!.duration) this.slashEffects.splice(index, 1);
+    }
+    this.dustTimer -= elapsed;
+    if (Math.abs(state.player.vx) > 12 && this.dustTimer <= 0) {
+      this.spawnParticles(2, '#b7a28b', state.player.x - state.cameraX, state.player.y - 7);
+      this.dustTimer = 0.14;
+    }
     this.updateParticles(elapsed);
 
     context.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
@@ -63,6 +98,7 @@ export class BattleRenderer {
     this.drawBackground(state.act, state.cameraX);
     this.drawGround(state.cameraX);
     this.drawTelegraphs(engine);
+    this.drawProjectiles(engine, state.cameraX);
     for (const image of engine.afterimages) {
       this.assets.drawSprite(context, heroSpritePath(state.heroId, 'idle'), image.x - state.cameraX, image.y, 190, state.player.facing, { alpha: image.timer / 0.32 });
     }
@@ -73,9 +109,13 @@ export class BattleRenderer {
       else this.drawPlayer(engine, state.cameraX);
     }
     this.drawParticles();
-    this.drawSlash(engine, state.cameraX);
+    this.drawSlash(state.cameraX);
     this.drawDamageNumbers(engine, state.cameraX);
     this.drawVignette();
+    if (state.musouSequence) {
+      context.fillStyle = 'rgba(8, 6, 10, .34)';
+      context.fillRect(0, 0, WIDTH, HEIGHT);
+    }
     context.restore();
   }
 
@@ -145,15 +185,20 @@ export class BattleRenderer {
       ? (player.lastAttackWasHeavy ? 'skill' : 'attack')
       : 'idle';
     const bob = player.attackTimer > 0 ? 0 : Math.sin(this.animationTime * 12) * 3;
+    const lean = player.attackTimer > 0 ? 0 : clampValue(player.vx / hero.speed, -1, 1) * 0.045;
     this.drawShadow(x, player.y, 38);
-    if (player.invulnerability > 0 && Math.floor(this.animationTime * 28) % 2 === 0) {
-      const flashDrawn = this.assets.drawSprite(this.context, heroSpritePath(state.heroId, pose), x, footY + bob, 190, player.facing, { white: true, alpha: 0.8 });
-      if (!flashDrawn) this.drawFallbackFighter(x, footY + bob, player.facing, '#ffffff', 190, 'spear');
-    } else {
-      const drawn = this.assets.drawSprite(this.context, heroSpritePath(state.heroId, pose), x, footY + bob, 190, player.facing);
-      if (!drawn) this.drawFallbackFighter(x, footY + bob, player.facing, hero.color, 190, 'spear');
-    }
-    if (player.attackTimer > 0) this.slashAge = Math.min(0.45, this.slashAge + 1 / 60);
+    const weapon = hero.id === 'guanyu' ? 'guandao' : hero.id === 'zhangfei' ? 'axe' : 'spear';
+    this.drawActor(
+      heroSpritePath(state.heroId, pose),
+      x,
+      footY + bob,
+      190,
+      player.facing,
+      hero.color,
+      weapon,
+      lean,
+      player.hitFlash,
+    );
   }
 
   private drawEnemy(enemy: EnemyState, cameraX: number): void {
@@ -161,46 +206,77 @@ export class BattleRenderer {
     const footY = enemy.y - enemy.z;
     if (x < -350 || x > WIDTH + 350) return;
     this.drawShadow(x, enemy.y, enemy.boss ? 56 : 34);
-    if (enemy.telegraph > 0) {
-      this.context.save();
-      this.context.globalAlpha = 0.16 + Math.sin(this.animationTime * 15) * 0.07;
-      this.context.fillStyle = '#e52d2d';
-      this.context.beginPath();
-      this.context.ellipse(x, enemy.y + 1, enemy.boss ? 165 : enemy.kind === 'cavalry' ? 120 : 75, 17, 0, 0, Math.PI * 2);
-      this.context.fill();
-      this.context.restore();
-    }
-    const pose = enemy.action === 'windup' || enemy.action === 'attack' ? 'attack' : 'idle';
     const height = enemy.boss ? 260 : enemy.kind === 'cavalry' ? 200 : 170;
-    if (enemy.flash > 0) {
-      const flashDrawn = this.assets.drawSprite(this.context, enemySpritePath(enemy.kind, pose, enemy.boss), x, footY, height, enemy.facing, { white: true, alpha: 0.85 });
-      if (!flashDrawn) this.drawFallbackFighter(x, footY, enemy.facing, '#ffffff', height, enemy.kind === 'shield' ? 'shield' : 'saber');
-    } else {
-      const drawn = this.assets.drawSprite(this.context, enemySpritePath(enemy.kind, pose, enemy.boss), x, footY, height, enemy.facing, {
-        tint: this.stateActTint(enemy),
-      });
-      if (!drawn) this.drawFallbackFighter(x, footY, enemy.facing, ENEMIES[enemy.kind].color, height, enemy.kind === 'shield' ? 'shield' : 'saber');
-    }
-    if (enemy.flash > 0) {
+    if (enemy.boss && enemy.phase === 2) {
       this.context.save();
-      this.context.fillStyle = '#fff';
-      this.context.font = '600 14px "Noto Serif SC", serif';
-      this.context.textAlign = 'center';
-      this.context.fillText(ENEMIES[enemy.kind].name, x, footY - height - 8);
+      this.context.globalAlpha = 0.38 + Math.sin(this.animationTime * 11) * 0.12;
+      this.context.strokeStyle = '#bf242b';
+      this.context.shadowColor = '#f02f32';
+      this.context.shadowBlur = 24;
+      this.context.lineWidth = 8;
+      this.context.beginPath();
+      this.context.ellipse(x, enemy.y - 92, 98, 112, this.animationTime * 0.7, 0, Math.PI * 2);
+      this.context.stroke();
       this.context.restore();
     }
-    if (enemy.kind === 'elite') {
+    if (enemy.elite) {
+      const affixColor = enemy.affix === '铁甲' ? '#79c7e8' : enemy.affix === '嗜血' ? '#8bd47e' : '#f26a55';
       this.context.save();
-      this.context.strokeStyle = 'rgba(255, 210, 101, .8)';
-      this.context.shadowColor = '#ffce63';
-      this.context.shadowBlur = 12;
-      this.context.strokeRect(x - 25, footY - height + 12, 50, height - 25);
+      this.context.strokeStyle = affixColor;
+      this.context.shadowColor = affixColor;
+      this.context.shadowBlur = 18;
+      this.context.globalAlpha = 0.72 + Math.sin(this.animationTime * 7) * 0.15;
+      this.context.lineWidth = 3;
+      this.context.strokeRect(x - 32, footY - height + 7, 64, height - 13);
       this.context.restore();
+    }
+    const pose = enemy.action === 'windup' || enemy.action === 'attack' || enemy.action === 'charging' ? 'attack' : 'idle';
+    this.drawActor(
+      enemySpritePath(enemy.kind, pose, enemy.boss),
+      x,
+      footY,
+      height,
+      enemy.facing,
+      ENEMIES[enemy.kind].color,
+      enemy.kind === 'shield' ? 'shield' : enemy.kind === 'cavalry' ? 'spear' : 'saber',
+      Math.sin(this.animationTime * 10 + x * 0.01) * 0.02,
+      enemy.flash,
+      this.stateActTint(enemy),
+      enemy.action === 'down' ? 0.72 : 1,
+    );
+    if (enemy.elite || (enemy.hp < enemy.maxHp && !enemy.boss)) {
+      this.context.save();
+      const barY = footY - height - (enemy.elite ? 24 : 12);
+      this.context.fillStyle = 'rgba(18, 12, 11, .78)';
+      this.context.fillRect(x - 34, barY, 68, 5);
+      this.context.fillStyle = enemy.elite ? '#d9b45e' : '#be5140';
+      this.context.fillRect(x - 33, barY + 1, 66 * Math.max(0, enemy.hp / enemy.maxHp), 3);
+      if (enemy.elite) {
+        this.context.fillStyle = enemy.affix === '铁甲' ? '#a8def1' : enemy.affix === '嗜血' ? '#b5e29b' : '#ff9877';
+        this.context.font = '700 12px "Noto Serif SC", serif';
+        this.context.textAlign = 'center';
+        this.context.shadowColor = '#000';
+        this.context.shadowBlur = 4;
+        this.context.fillText(enemy.affix ?? '精锐', x, barY - 4);
+      }
+      this.context.restore();
+    }
+    if (enemy.burn > 0) {
+      for (let ember = 0; ember < 3; ember += 1) {
+        const flicker = (this.animationTime * 1.8 + ember * 0.31) % 1;
+        this.context.save();
+        this.context.globalAlpha = 1 - flicker;
+        this.context.fillStyle = ember % 2 ? '#ffd176' : '#ec5a32';
+        this.context.beginPath();
+        this.context.arc(x + Math.sin(this.animationTime * 8 + ember) * 24, footY - height * 0.48 - flicker * 40, 2 + flicker * 2, 0, Math.PI * 2);
+        this.context.fill();
+        this.context.restore();
+      }
     }
   }
 
   private stateActTint(enemy: EnemyState): string | undefined {
-    return this.currentAct === 2 && !enemy.boss ? '145deg' : undefined;
+    return this.currentAct === 2 && !enemy.boss ? 'act2' : undefined;
   }
 
   private get currentAct(): 1 | 2 {
@@ -209,10 +285,46 @@ export class BattleRenderer {
 
   private activeAct: 1 | 2 = 1;
 
-  private drawFallbackFighter(x: number, footY: number, facing: 1 | -1, color: string, height: number, weapon: 'spear' | 'shield' | 'saber'): void {
+  private drawActor(
+    path: string,
+    x: number,
+    footY: number,
+    height: number,
+    facing: 1 | -1,
+    color: string,
+    weapon: 'spear' | 'shield' | 'saber' | 'guandao' | 'axe',
+    lean = 0,
+    hitFlash = 0,
+    tint?: string,
+    opacity = 1,
+  ): void {
+    const context = this.context;
+    const flashAlpha = Math.min(0.6, Math.max(0, hitFlash / 0.12 * 0.6));
+    context.save();
+    context.globalAlpha = opacity;
+    context.translate(x, footY);
+    context.rotate(lean);
+    const drawn = this.assets.drawSprite(context, path, 0, 0, height, facing, { tint, alpha: opacity });
+    if (!drawn) this.drawFallbackFighter(0, 0, facing, color, height, weapon, 0);
+    if (flashAlpha > 0) {
+      context.globalAlpha = opacity * flashAlpha;
+      const flashDrawn = this.assets.drawSprite(context, path, 0, 0, height, facing, { white: true, alpha: opacity * flashAlpha });
+      if (!flashDrawn) this.drawFallbackFighter(0, 0, facing, '#fff', height, weapon, 0);
+    }
+    context.restore();
+  }
+
+  private drawFallbackFighter(
+    x: number,
+    footY: number,
+    facing: 1 | -1,
+    color: string,
+    height: number,
+    weapon: 'spear' | 'shield' | 'saber' | 'guandao' | 'axe',
+    lean = Math.sin(this.animationTime * 10 + x * 0.01) * 0.035,
+  ): void {
     const context = this.context;
     const scale = height / 190;
-    const lean = Math.sin(this.animationTime * 10 + x * 0.01) * 0.035;
     context.save();
     context.translate(x, footY);
     context.scale(facing, 1);
@@ -250,13 +362,13 @@ export class BattleRenderer {
       context.fill();
     } else {
       context.moveTo(height * 0.08, -height * 0.5);
-      context.lineTo(height * (weapon === 'spear' ? 0.78 : 0.58), -height * 0.42);
+      context.lineTo(height * (weapon === 'spear' ? 0.82 : weapon === 'guandao' ? 0.7 : 0.58), -height * 0.42);
       context.stroke();
-      context.fillStyle = '#ded3b7';
+      context.fillStyle = weapon === 'axe' ? '#c45a43' : '#ded3b7';
       context.beginPath();
-      context.moveTo(height * 0.76, -height * 0.42);
-      context.lineTo(height * 0.68, -height * 0.48);
-      context.lineTo(height * 0.7, -height * 0.37);
+      context.moveTo(height * 0.8, -height * 0.42);
+      context.lineTo(height * 0.68, -height * 0.5);
+      context.lineTo(height * 0.69, -height * 0.34);
       context.fill();
     }
     context.restore();
@@ -272,48 +384,200 @@ export class BattleRenderer {
     context.restore();
   }
 
-  private drawSlash(engine: GameEngine, cameraX: number): void {
-    const player = engine.state.player;
-    if (player.attackTimer <= 0) return;
+  private drawSlash(cameraX: number): void {
     const context = this.context;
-    const heavy = player.lastAttackWasHeavy;
-    const radius = heavy ? 150 : 110 + player.comboIndex * 5;
-    const x = player.x - cameraX + player.facing * 42;
-    const y = player.y - player.z - 105;
-    context.save();
-    context.translate(x, y);
-    if (player.facing < 0) context.scale(-1, 1);
-    context.globalAlpha = Math.min(0.85, (player.attackTimer / (heavy ? 0.54 : 0.23)) * 0.9);
-    context.strokeStyle = heavy ? '#f0c567' : '#e9e0c7';
-    context.lineWidth = heavy ? 9 : 5;
-    context.shadowColor = heavy ? '#efaf49' : '#fff2c7';
-    context.shadowBlur = 18;
-    context.beginPath();
-    context.arc(0, 0, radius, -0.92, 0.78);
-    context.stroke();
-    context.strokeStyle = '#fff';
-    context.lineWidth = 2;
-    context.beginPath();
-    context.arc(0, 0, radius - 9, -0.83, 0.67);
-    context.stroke();
-    context.restore();
+    for (const slash of this.slashEffects) {
+      const progress = slash.age / slash.duration;
+      const radius = (slash.heroId === 'guanyu' ? 126 : slash.heroId === 'zhangfei' ? 118 : 94)
+        + slash.hitIndex * (slash.heroId === 'guanyu' ? 12 : 7)
+        + (slash.heavy ? 42 : 0);
+      const x = slash.x - cameraX + slash.facing * (slash.heroId === 'zhaoyun' ? 38 : 48);
+      const y = slash.y - 11;
+      context.save();
+      context.translate(x, y);
+      if (slash.facing < 0) context.scale(-1, 1);
+      context.globalAlpha = Math.max(0, 1 - progress) * (slash.heavy ? 0.95 : 0.82);
+      context.strokeStyle = slash.heavy ? '#f0c567' : slash.heroId === 'zhaoyun' ? '#e7f5f4' : '#f4e8cd';
+      context.lineWidth = slash.heavy ? 10 : slash.heroId === 'zhangfei' ? 7 : 4;
+      context.shadowColor = slash.heavy ? '#efaf49' : '#fff2c7';
+      context.shadowBlur = slash.heavy ? 22 : 14;
+      if (slash.heroId === 'zhaoyun') {
+        for (let streak = 0; streak < 2 + slash.hitIndex % 2; streak += 1) {
+          context.beginPath();
+          context.moveTo(-18 - streak * 8, -22 + streak * 18);
+          context.lineTo(radius + 18 - streak * 9, -8 + streak * 18);
+          context.stroke();
+        }
+      } else {
+        context.beginPath();
+        const arcStart = slash.heroId === 'guanyu' ? -1.08 : -0.96;
+        const arcEnd = slash.heroId === 'guanyu' ? 1.02 : 0.72;
+        context.arc(0, 0, radius, arcStart + progress * 0.12, arcEnd + progress * 0.12);
+        context.stroke();
+        context.strokeStyle = '#fff6df';
+        context.lineWidth = slash.heavy ? 3 : 2;
+        context.beginPath();
+        context.arc(0, 0, radius - 11, arcStart + 0.1, arcEnd - 0.1);
+        context.stroke();
+      }
+      context.restore();
+    }
   }
 
   private drawTelegraphs(engine: GameEngine): void {
     const context = this.context;
+    const cameraX = engine.state.cameraX;
     for (const enemy of engine.state.enemies) {
-      if (!enemy.boss || enemy.telegraph <= 0) continue;
-      const x = enemy.x - engine.state.cameraX;
+      if (enemy.telegraph <= 0 && enemy.action !== 'charging') continue;
+      const x = enemy.x - cameraX;
+      const alpha = 0.28 + Math.sin(this.animationTime * 18) * 0.1;
       context.save();
-      context.fillStyle = `rgba(190, 31, 28, ${0.08 + Math.sin(this.animationTime * 18) * 0.04})`;
-      context.beginPath();
-      context.ellipse(x, enemy.y, 190, 42, 0, 0, Math.PI * 2);
-      context.fill();
-      context.strokeStyle = 'rgba(230, 63, 45, .85)';
-      context.setLineDash([10, 8]);
-      context.stroke();
+      context.globalAlpha = alpha;
+      context.strokeStyle = '#ef4037';
+      context.fillStyle = 'rgba(210, 40, 34, .12)';
+      context.shadowColor = '#f04438';
+      context.shadowBlur = 14;
+      context.lineWidth = enemy.boss ? 4 : 3;
+      if (enemy.telegraphKind === 'charge') {
+        const endX = x + enemy.facing * Math.min(900, enemy.chargeRemaining || 900);
+        context.beginPath();
+        context.moveTo(x, enemy.y + 2);
+        context.lineTo(endX, enemy.y + 2);
+        context.stroke();
+        context.setLineDash([10, 8]);
+        context.beginPath();
+        context.moveTo(x, enemy.y - 12);
+        context.lineTo(endX, enemy.y - 12);
+        context.stroke();
+      } else if (enemy.telegraphKind === 'sweep') {
+        context.beginPath();
+        context.ellipse(x + enemy.facing * 100, enemy.y - 90, 180, 88, 0, -1.15, 1.15);
+        context.fill();
+        context.stroke();
+        context.setLineDash([8, 6]);
+        context.beginPath();
+        context.arc(x, enemy.y - 90, 190, enemy.facing > 0 ? -1.15 : Math.PI - 1.15, enemy.facing > 0 ? 1.15 : Math.PI + 1.15);
+        context.stroke();
+      } else if (enemy.telegraphKind === 'slam') {
+        context.beginPath();
+        context.ellipse(x, enemy.y, 72 + (1 - enemy.timer / 0.55) * 100, 25 + (1 - enemy.timer / 0.55) * 30, 0, 0, Math.PI * 2);
+        context.fill();
+        context.stroke();
+      } else if (enemy.telegraphKind === 'orb' || enemy.telegraphKind === 'teleport') {
+        context.beginPath();
+        context.arc(x, enemy.y - 88, enemy.telegraphKind === 'orb' ? 34 : 54, 0, Math.PI * 2);
+        context.stroke();
+        context.beginPath();
+        context.arc(x, enemy.y - 88, enemy.telegraphKind === 'orb' ? 20 : 34, this.animationTime * 2, this.animationTime * 2 + Math.PI * 1.4);
+        context.stroke();
+      } else {
+        context.beginPath();
+        context.ellipse(x + enemy.facing * 55, enemy.y - 16, enemy.boss ? 190 : 95, 34, 0, 0, Math.PI * 2);
+        context.fill();
+        context.stroke();
+      }
       context.restore();
     }
+    for (const telegraph of engine.state.groundTelegraphs) {
+      const x = telegraph.x - cameraX;
+      const progress = Math.min(1, telegraph.timer / telegraph.duration);
+      const radius = telegraph.kind === 'lightning'
+        ? telegraph.radius
+        : telegraph.maxRadius * progress;
+      context.save();
+      context.globalAlpha = telegraph.timer >= telegraph.duration ? 0.88 : 0.25 + progress * 0.44;
+      context.strokeStyle = telegraph.owner === 'player' ? '#f5d36b' : '#f23830';
+      context.fillStyle = telegraph.owner === 'player' ? 'rgba(246, 208, 94, .13)' : 'rgba(225, 45, 36, .14)';
+      context.shadowColor = context.strokeStyle;
+      context.shadowBlur = telegraph.kind === 'lightning' ? 18 : 10;
+      context.lineWidth = telegraph.kind === 'lightning' ? 3 : 4;
+      context.beginPath();
+      if (telegraph.kind === 'lightning') {
+        context.ellipse(x, telegraph.y, radius, radius * 0.32, 0, 0, Math.PI * 2);
+      } else {
+        context.ellipse(x, telegraph.y, radius, radius * 0.32, 0, 0, Math.PI * 2);
+      }
+      context.fill();
+      context.stroke();
+      if (telegraph.kind === 'lightning' && telegraph.timer >= telegraph.duration) {
+        this.drawLightningBolt(x, telegraph.y, telegraph.owner === 'player' ? '#ffe68c' : '#eef2ff');
+      }
+      context.restore();
+    }
+  }
+
+  private drawProjectiles(engine: GameEngine, cameraX: number): void {
+    const context = this.context;
+    for (const projectile of engine.state.projectiles) {
+      const x = projectile.x - cameraX;
+      const y = projectile.y - projectile.z;
+      const angle = Math.atan2(projectile.vy, projectile.vx);
+      context.save();
+      context.translate(x, y);
+      context.rotate(angle);
+      context.globalAlpha = Math.min(1, projectile.lifetime * 2);
+      if (projectile.kind === 'arrow') {
+        context.strokeStyle = '#e9d7ad';
+        context.shadowColor = '#ffcf82';
+        context.shadowBlur = 8;
+        context.lineWidth = 3;
+        context.beginPath();
+        context.moveTo(-22, 0);
+        context.lineTo(12, 0);
+        context.stroke();
+        context.fillStyle = '#f8e7c1';
+        context.beginPath();
+        context.moveTo(19, 0);
+        context.lineTo(9, -4);
+        context.lineTo(9, 4);
+        context.fill();
+      } else if (projectile.kind === 'crescent') {
+        context.strokeStyle = projectile.owner === 'player' ? '#c5f1ec' : '#f7cb68';
+        context.shadowColor = context.strokeStyle;
+        context.shadowBlur = 20;
+        context.lineWidth = 10;
+        context.beginPath();
+        context.arc(0, 0, 28, -1.1, 1.1);
+        context.stroke();
+        context.strokeStyle = '#fff7da';
+        context.lineWidth = 3;
+        context.beginPath();
+        context.arc(0, 0, 21, -0.9, 0.9);
+        context.stroke();
+      } else {
+        const orbGradient = context.createRadialGradient(-5, -5, 2, 0, 0, projectile.radius + 8);
+        orbGradient.addColorStop(0, '#fff3c7');
+        orbGradient.addColorStop(0.35, '#f6c849');
+        orbGradient.addColorStop(1, 'rgba(202, 62, 36, 0)');
+        context.fillStyle = orbGradient;
+        context.shadowColor = '#f6a333';
+        context.shadowBlur = 18;
+        context.beginPath();
+        context.arc(0, 0, projectile.radius + 8, 0, Math.PI * 2);
+        context.fill();
+      }
+      context.restore();
+    }
+  }
+
+  private drawLightningBolt(x: number, y: number, color: string): void {
+    const context = this.context;
+    context.save();
+    context.strokeStyle = color;
+    context.shadowColor = color;
+    context.shadowBlur = 24;
+    context.lineWidth = 8;
+    context.beginPath();
+    context.moveTo(x + Math.sin(this.animationTime * 17) * 8, y - 200);
+    context.lineTo(x - 15, y - 150);
+    context.lineTo(x + 12, y - 100);
+    context.lineTo(x - 6, y - 54);
+    context.lineTo(x, y);
+    context.stroke();
+    context.lineWidth = 2;
+    context.strokeStyle = '#fff';
+    context.stroke();
+    context.restore();
   }
 
   private drawDamageNumbers(engine: GameEngine, cameraX: number): void {
@@ -322,30 +586,46 @@ export class BattleRenderer {
     context.textAlign = 'center';
     for (const number of engine.state.floatingNumbers) {
       context.globalAlpha = Math.min(1, number.timer * 1.5);
-      context.font = `${number.crit ? '900 28px' : '700 21px'} "Noto Serif SC", serif`;
+      context.font = `${number.crit ? '900 32px' : '700 21px'} "Noto Serif SC", serif`;
       context.lineWidth = 3;
       context.strokeStyle = 'rgba(20, 12, 10, .8)';
       context.fillStyle = number.value < 0 ? '#ef7564' : number.crit ? '#ffd66a' : '#fff0d2';
       context.strokeText(String(Math.abs(number.value)), number.x - cameraX, number.y);
       context.fillText(String(Math.abs(number.value)), number.x - cameraX, number.y);
+      if (number.crit) {
+        context.font = '900 13px "Noto Serif SC", serif';
+        context.strokeText(number.label ?? '暴击', number.x - cameraX, number.y - 25);
+        context.fillStyle = '#ffe39a';
+        context.fillText(number.label ?? '暴击', number.x - cameraX, number.y - 25);
+      }
     }
     context.restore();
   }
 
-  private handleEvents(events: string[]): void {
+  private handleEvents(engine: GameEngine): void {
+    const { state } = engine;
+    const events = state.events;
     if (events.length < this.lastEventIndex) this.lastEventIndex = 0;
     for (const event of events.slice(this.lastEventIndex)) {
+      const latestNumber = state.floatingNumbers[state.floatingNumbers.length - 1];
+      const eventX = latestNumber ? latestNumber.x - state.cameraX : state.player.x - state.cameraX;
+      const eventY = latestNumber?.y ?? state.player.y - state.player.z - 80;
       if (event === '击破') {
         this.audio.play('hit');
-        this.spawnParticles(9, '#e9b85f');
+        this.spawnParticles(9, '#e9b85f', eventX, eventY);
       } else if (event === '闪避' || event === '刹那') {
         this.audio.play('dodge');
-        this.spawnParticles(6, '#d4e7e4');
+        this.spawnParticles(6, '#d4e7e4', eventX, eventY);
       } else if (event === '破防' || event === '狂怒') {
         this.audio.play('heavy');
-        this.spawnParticles(12, '#e96645');
+        this.spawnParticles(12, '#e96645', eventX, eventY);
       } else if (event === '受击') {
         this.audio.play('hit');
+        this.spawnParticles(8, '#ef876d', state.player.x - state.cameraX, state.player.y - state.player.z - 72);
+      } else if (event === '命中火花') {
+        this.spawnParticles(7, '#fff0c7', eventX, eventY);
+      } else if (event === '落地') {
+        this.spawnParticles(9, '#b7a28b', state.player.x - state.cameraX, state.player.y - 4);
       } else if (event === '龙胆冲阵' || event === '刀劈千军' || event === '长坂断桥') {
         this.audio.play('musou');
       } else if (event === '百鸟朝凤' || event === '青龙斩' || event === '当阳怒吼' || event === '落地重击') {
@@ -359,13 +639,13 @@ export class BattleRenderer {
     this.lastEventIndex = events.length;
   }
 
-  private spawnParticles(count: number, color: string): void {
+  private spawnParticles(count: number, color: string, originX = 640, originY = 500): void {
     for (let index = 0; index < count; index += 1) {
       const angle = Math.random() * Math.PI * 2;
       const speed = 40 + Math.random() * 200;
       this.particles.push({
-        x: 640 + (Math.random() - 0.5) * 300,
-        y: 500 + (Math.random() - 0.5) * 130,
+        x: originX + (Math.random() - 0.5) * 26,
+        y: originY + (Math.random() - 0.5) * 26,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed - 40,
         life: 0.4 + Math.random() * 0.45,

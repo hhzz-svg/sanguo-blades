@@ -118,6 +118,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .hud-numbers { position: absolute; top: 19px; right: 0; font: 10px sans-serif; color: #d3c1a1; }
 .musou-track { height: 5px; margin-top: 5px; }
 .musou-track i { background: linear-gradient(90deg,#4788a3,#83c7d6); }
+.musou-track.ready { box-shadow: 0 0 12px #8bdff0; }
+.musou-track.ready i { background: linear-gradient(90deg,#94edf6,#f6e6a2); }
 .hud-bars small { font: 9px sans-serif; color: #92bbc0; }
 .stage-hud { text-align: center; margin: 0 auto; padding: 4px 18px 8px; min-width: 220px; background: linear-gradient(180deg,#100d0dc4,transparent); }
 .stage-act { color: #d7bd86; font-size: 10px; letter-spacing: .17em; }
@@ -142,9 +144,14 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .charge-hud b { color: #e4c478; font-weight: 500; }
 .charge-track { height: 4px; }
 .charge-track i { background: #e0b45a; }
-.advance-button { margin-left: 17px; border: 1px solid #ebc56d; color: #ffe5a9; background: #7c201bc9; padding: 10px 15px; letter-spacing: .15em; animation: pulse 1.3s infinite; }
+.dodge-pips { display: inline-flex; gap: 4px; }
+.dodge-pips i { display: block; width: 7px; height: 7px; border: 1px solid #dcc27a; border-radius: 50%; }
+.dodge-pips i.filled { background: #f2d579; box-shadow: 0 0 5px #f2d57988; }
+.advance-button { margin-left: 17px; border: 1px solid #ebc56d; color: #ffe5a9; background: #7c201bc9; padding: 10px 15px; letter-spacing: .15em; animation: pulse 1.3s infinite; pointer-events: none; }
 .advance-button b { color: var(--gold); margin-left: 10px; }
 @keyframes pulse { 50% { box-shadow: 0 0 18px #d2984280; } }
+.snap-flash { position: absolute; left: 50%; top: 42%; transform: translate(-50%,10px) scale(.88); opacity: 0; z-index: 3; pointer-events: none; color: #ffe89b; font-size: clamp(28px,4vw,48px); letter-spacing: .35em; font-weight: 900; text-shadow: 0 0 10px #fff1ad,0 0 34px #e6a837,0 3px 8px #160f0b; transition: opacity .08s,transform .18s; }
+.snap-flash.visible { opacity: 1; transform: translate(-50%,0) scale(1); }
 .modal-backdrop { position: absolute; inset: 0; display: grid; place-items: center; background: #090709b8; backdrop-filter: blur(4px); z-index: 5; }
 .modal-panel { width: min(850px,90vw); padding: 28px; border: 1px solid #c29c58; background: radial-gradient(ellipse at top,#30211d,#171214 72%); box-shadow: 0 20px 80px #000b,inset 0 0 30px #e0b45a0d; text-align: center; }
 .modal-panel h2 { margin: 4px 0; font-size: 30px; letter-spacing: .2em; color: #f0dfbd; }
@@ -193,8 +200,12 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .virtual-stick { width: 116px; height: 116px; border: 1px solid #e6d2a766; background: #100d0d57; border-radius: 50%; display: grid; place-items: center; pointer-events: auto; touch-action: none; }
   .virtual-stick i { width: 43px; height: 43px; border-radius: 50%; background: #d7c18d88; border: 1px solid #f3d99a; }
   .touch-buttons { display: grid; grid-template-columns: repeat(3,48px); gap: 9px; pointer-events: auto; }
-  .touch-buttons button { width: 48px; height: 48px; border-radius: 50%; border: 1px solid #e3c478aa; color: #ffe5a9; background: #441c1bd9; box-shadow: 0 3px 9px #0009; font-size: 12px; touch-action: none; }
+  .touch-buttons button { position: relative; overflow: hidden; width: 48px; height: 48px; border-radius: 50%; border: 1px solid #e3c478aa; color: #ffe5a9; background: #441c1bd9; box-shadow: 0 3px 9px #0009; font-size: 12px; touch-action: none; }
+  .touch-buttons button b { position: relative; z-index: 1; font-weight: 500; }
+  .cooldown-ring { position: absolute; inset: 0; border-radius: inherit; background: conic-gradient(#efc75c var(--cooldown-angle, 0deg),transparent 0); mask: radial-gradient(farthest-side,transparent calc(100% - 4px),#000 calc(100% - 3px)); }
+  .touch-buttons button.ready { box-shadow: 0 0 13px #f1d27b88,0 3px 9px #0009; }
   .touch-buttons button[data-control="musou"] { grid-column: 2; background: #28515dbb; }
+  .touch-buttons button[data-control="musou"].ready { border-color: #fff0a8; box-shadow: 0 0 20px #94eaf5,0 0 35px #e1b95488; animation: pulse 1s infinite; }
   .combat-hints { display: none; }
 }
 @media (max-width: 760px) {
@@ -229,4 +240,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .blessing-card p { font-size: 9px; }
   .blessing-seal { width: 35px; height: 35px; }
   .blessing-rarity, .choose-label { font-size: 8px; }
+}
+
+@media (max-height: 500px) {
+  .battle-screen { min-height: 0; }
 }

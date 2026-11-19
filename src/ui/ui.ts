@@ -104,7 +104,7 @@ export class GameUI {
         <canvas id="battle-canvas" aria-label="战场"></canvas>
         <div class="battle-vignette"></div>
         <section class="hud-top">
-          <div class="hero-hud"><div class="hud-portrait" id="hud-portrait"></div><div class="hud-bars"><strong id="hud-hero-name">赵云</strong><div class="hp-track"><i id="hud-hp"></i></div><div class="hud-numbers" id="hud-hp-number"></div><div class="musou-track"><i id="hud-musou"></i></div><small>无双</small></div></div>
+          <div class="hero-hud"><div class="hud-portrait" id="hud-portrait"></div><div class="hud-bars"><strong id="hud-hero-name">赵云</strong><div class="hp-track"><i id="hud-hp"></i></div><div class="hud-numbers" id="hud-hp-number"></div><div class="musou-track"><i id="hud-musou"></i></div><small id="hud-musou-label">无双 0%</small></div></div>
           <div class="stage-hud"><div class="stage-act">讨伐 · <span id="hud-act">黄巾之乱</span></div><strong id="hud-stage">颍川荒野</strong><small id="hud-wave">第 1 / 2 波</small></div>
           <button class="hud-pause" data-action="pause">Ⅱ</button>
         </section>
@@ -112,12 +112,13 @@ export class GameUI {
         <section class="hud-bottom">
           <div class="combo-hud" id="combo-hud"><strong id="combo-count">0</strong><span>连击</span><b id="combo-rank"></b></div>
           <div class="combat-hints"><span>J 斩击</span><span>K 破阵</span><span>Q 无双</span><span>L 闪避</span></div>
-          <div class="charge-hud"><span>闪避 <b id="hud-dodge">0 / 2</b></span><span>破阵 <b id="hud-heavy">就绪</b></span><div class="charge-track"><i id="hud-charge"></i></div></div>
-          <button class="advance-button hidden" id="advance-button" data-action="advance">前进 <b>➜</b></button>
+          <div class="charge-hud"><span>闪避 <b id="hud-dodge" class="dodge-pips"></b></span><span>破阵 <b id="hud-heavy">就绪</b></span><div class="charge-track"><i id="hud-charge"></i></div></div>
+          <div class="advance-button hidden" id="advance-button">前进 <b>➜</b></div>
         </section>
+        <div class="snap-flash" id="snap-flash">刹那</div>
         <div class="touch-controls hidden" id="touch-controls">
           <div class="virtual-stick" id="virtual-stick"><i></i></div>
-          <div class="touch-buttons"><button data-control="attack">斩</button><button data-control="heavy">破</button><button data-control="dodge">闪</button><button data-control="jump">跃</button><button data-control="musou">无双</button></div>
+          <div class="touch-buttons"><button data-control="attack">斩</button><button data-control="heavy"><i class="cooldown-ring"></i><b>破</b></button><button data-control="dodge">闪</button><button data-control="jump">跃</button><button data-control="musou">无双</button></div>
         </div>
         <div id="battle-modal"></div>
       </main>`;
@@ -135,11 +136,24 @@ export class GameUI {
     if (hp) hp.style.width = `${Math.max(0, state.player.hp / state.player.maxHp * 100)}%`;
     const musou = this.root.querySelector<HTMLElement>('#hud-musou');
     if (musou) musou.style.width = `${state.player.musou}%`;
+    this.setText('#hud-musou-label', `无双 ${Math.floor(state.player.musou)}%`);
+    this.root.querySelector('.musou-track')?.classList.toggle('ready', state.player.musou >= 100);
     this.setText('#hud-hp-number', `${Math.ceil(state.player.hp)} / ${Math.ceil(state.player.maxHp)}`);
-    this.setText('#hud-dodge', `${state.player.dodgeCharges} / ${state.player.maxDodgeCharges}`);
+    const dodgePips = this.root.querySelector<HTMLElement>('#hud-dodge');
+    if (dodgePips) {
+      dodgePips.innerHTML = Array.from({ length: state.player.maxDodgeCharges }, (_, index) =>
+        `<i class="${index < state.player.dodgeCharges ? 'filled' : ''}"></i>`).join('');
+    }
     this.setText('#hud-heavy', state.player.heavyCooldown > 0 ? `${state.player.heavyCooldown.toFixed(1)}s` : '就绪');
     const charge = this.root.querySelector<HTMLElement>('#hud-charge');
-    if (charge) charge.style.width = `${Math.max(0, (1 - state.player.heavyCooldown / hero.heavyCooldown) * 100)}%`;
+    const cooldownProgress = Math.max(0, Math.min(1, state.player.heavyCooldown / hero.heavyCooldown));
+    if (charge) charge.style.width = `${(1 - cooldownProgress) * 100}%`;
+    const heavyButton = this.root.querySelector<HTMLElement>('.touch-buttons [data-control="heavy"]');
+    heavyButton?.style.setProperty('--cooldown-angle', `${(1 - cooldownProgress) * 360}deg`);
+    heavyButton?.classList.toggle('ready', cooldownProgress === 0);
+    const musouButton = this.root.querySelector<HTMLElement>('.touch-buttons [data-control="musou"]');
+    musouButton?.classList.toggle('ready', state.player.musou >= 100);
+    this.root.querySelector('#snap-flash')?.classList.toggle('visible', state.player.snapTimer > 0);
     const combo = this.root.querySelector<HTMLElement>('#combo-hud');
     combo?.classList.toggle('visible', state.player.comboDisplayTimer > 0);
     this.setText('#combo-count', String(state.player.comboHits));

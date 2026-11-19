@@ -3,6 +3,7 @@ const BASE = import.meta.env.BASE_URL;
 export class AssetLoader {
   private readonly images = new Map<string, HTMLImageElement>();
   private readonly whiteMasks = new WeakMap<HTMLImageElement, HTMLCanvasElement>();
+  private readonly tintedSprites = new WeakMap<HTMLImageElement, Map<string, HTMLCanvasElement>>();
 
   load(path: string): HTMLImageElement {
     const existing = this.images.get(path);
@@ -32,10 +33,11 @@ export class AssetLoader {
     const width = height * image.naturalWidth / image.naturalHeight;
     context.save();
     context.globalAlpha = options.alpha ?? 1;
-    if (options.tint) context.filter = `sepia(.3) saturate(1.8) hue-rotate(${options.tint})`;
     context.translate(x, footY);
     context.scale(facing, 1);
-    const source = options.white ? this.whiteMask(image) : image;
+    const source = options.white
+      ? this.whiteMask(image)
+      : options.tint ? this.tintedSprite(image, options.tint) : image;
     context.drawImage(source, -width / 2, -height, width, height);
     context.restore();
     return true;
@@ -57,6 +59,26 @@ export class AssetLoader {
     this.whiteMasks.set(image, canvas);
     return canvas;
   }
+
+  private tintedSprite(image: HTMLImageElement, tint: string): HTMLCanvasElement {
+    let variants = this.tintedSprites.get(image);
+    if (!variants) {
+      variants = new Map();
+      this.tintedSprites.set(image, variants);
+    }
+    const cached = variants.get(tint);
+    if (cached) return cached;
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext('2d');
+    if (context) {
+      context.filter = tint === 'act2' ? 'hue-rotate(-40deg) saturate(1.2) brightness(0.8)' : 'none';
+      context.drawImage(image, 0, 0);
+    }
+    variants.set(tint, canvas);
+    return canvas;
+  }
 }
 
 export function heroSpritePath(heroId: string, pose: 'idle' | 'attack' | 'skill'): string {
@@ -65,6 +87,5 @@ export function heroSpritePath(heroId: string, pose: 'idle' | 'attack' | 'skill'
 
 export function enemySpritePath(kind: string, pose: 'idle' | 'attack', boss: boolean): string {
   if (boss) return `bosses/${kind}_${pose}.png`;
-  const name = kind === 'elite' ? 'saber' : kind;
-  return `enemies/${name}_${pose}.png`;
+  return `enemies/${kind}_${pose}.png`;
 }
